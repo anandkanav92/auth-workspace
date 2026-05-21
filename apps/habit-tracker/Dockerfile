@@ -1,12 +1,12 @@
 # Stage 1: Build
 FROM node:22-alpine AS build
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 
 WORKDIR /workspace
 
 # Copy workspace config files
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc tsconfig.base.json ./
 
 # Copy auth-google package
 COPY packages/auth-google/ packages/auth-google/
