@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
+import { useAuth, signOut } from "@myorg/auth-google";
 import { useHabits } from "./hooks/useHabits";
 import Timer from "./components/Timer";
 import HabitForm from "./components/HabitForm";
 import HabitDetail from "./components/HabitDetail";
 import StreakDots from "./components/StreakDots";
+import LoginPage from "./components/LoginPage";
 import { migrateIfNeeded } from "./data/migration";
 import {
   getDateForOffset,
@@ -14,6 +16,31 @@ import {
 } from "./data/constants";
 
 export default function HabitTracker() {
+  const { user, loading: authLoading } = useAuth();
+
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'DM Sans', sans-serif",
+        color: "#888",
+      }}>
+        Loading...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return <AuthenticatedApp user={user} />;
+}
+
+function AuthenticatedApp({ user }) {
   const {
     habits,
     categories,
@@ -79,6 +106,43 @@ export default function HabitTracker() {
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
         {/* Timer */}
         <Timer />
+
+        {/* User bar */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "8px 4px",
+          marginBottom: 8,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {user.photoURL && (
+              <img
+                src={user.photoURL}
+                alt=""
+                style={{ width: 28, height: 28, borderRadius: "50%" }}
+                referrerPolicy="no-referrer"
+              />
+            )}
+            <span style={{
+              fontSize: 13, fontWeight: 500, color: "#666",
+              fontFamily: "'DM Sans', sans-serif",
+            }}>
+              {user.displayName || user.email}
+            </span>
+          </div>
+          <button
+            onClick={() => signOut()}
+            style={{
+              background: "none", border: "1px solid #e0e0eb",
+              borderRadius: 8, padding: "4px 12px",
+              fontSize: 12, color: "#999", cursor: "pointer",
+              fontFamily: "'Space Mono', monospace",
+            }}
+          >
+            Sign out
+          </button>
+        </div>
 
         {/* Date Header */}
         <div
