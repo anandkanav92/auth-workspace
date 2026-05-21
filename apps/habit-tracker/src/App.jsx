@@ -7,7 +7,6 @@ import HabitForm from "./components/HabitForm";
 import HabitDetail from "./components/HabitDetail";
 import StreakDots from "./components/StreakDots";
 import LoginPage from "./components/LoginPage";
-import { migrateIfNeeded } from "./data/migration";
 import {
   getDateForOffset,
   getJsDayToOurDay,
@@ -46,6 +45,7 @@ function AuthenticatedApp({ user }) {
     habits,
     categories,
     completions,
+    loading: dataLoading,
     addHabit,
     updateHabit,
     deleteHabit,
@@ -108,13 +108,28 @@ function AuthenticatedApp({ user }) {
     }
   }, [timerState.running, timerState.remaining]);
 
-  const migratedRef = useRef(false);
-
+  // Seed default activities for brand-new users (runs after PocketBase data loads)
+  const seededRef = useRef(false);
   useEffect(() => {
-    if (migratedRef.current) return;
-    migratedRef.current = true;
-    migrateIfNeeded(habits, addHabit, user.uid);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (dataLoading || seededRef.current) return;
+    seededRef.current = true;
+    if (habits.length === 0) {
+      import("./data/migration").then(({ migrateIfNeeded }) => {
+        migrateIfNeeded(habits, addHabit, user.uid);
+      });
+    }
+  }, [dataLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (dataLoading) {
+    return (
+      <div style={{
+        minHeight: "100vh", display: "flex", alignItems: "center",
+        justifyContent: "center", fontFamily: "'DM Sans', sans-serif", color: "#888",
+      }}>
+        Loading...
+      </div>
+    );
+  }
 
   // Computed values
   const viewDate = getDateForOffset(dayOffset);

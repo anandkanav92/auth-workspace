@@ -8,6 +8,22 @@ services:
         VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN}
         VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID}
         VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID}
+        VITE_PB_URL: ${VITE_PB_URL}
     ports:
       - "3100:80"
     restart: unless-stopped
+
+  pocketbase:
+    build:
+      context: ./pb
+    ports:
+      - "8090:8090"
+    volumes:
+      - pb_data:/pb/pb_data
+    environment:
+      - PB_EMAIL=${PB_EMAIL}
+      - PB_PASSWORD=${PB_PASSWORD}
+    restart: unless-stopped
+
+volumes:
+  pb_data:
