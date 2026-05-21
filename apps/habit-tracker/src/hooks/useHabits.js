@@ -157,7 +157,10 @@ export function useHabits(userId) {
       });
     }
 
-    init().catch(console.error);
+    init().catch(err => {
+      console.error("PocketBase init failed:", err);
+      if (!cancelled) setLoading(false);
+    });
 
     return () => {
       cancelled = true;
