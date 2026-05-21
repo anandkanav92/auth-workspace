@@ -94,9 +94,9 @@ export function useHabits(userId) {
     async function init() {
       const cutoff = cutoffDate();
       const [habitsRes, catsRes, compsRes] = await Promise.all([
-        pb.collection("habits").getFullList({ filter: `userId="${userId}"`, sort: "created" }),
-        pb.collection("categories").getFullList({ filter: `userId="${userId}"`, sort: "created" }),
-        pb.collection("completions").getFullList({ filter: `userId="${userId}" && dateStr>="${cutoff}"` }),
+        pb.collection("habits").getFullList({ filter: `userId='${userId}'` }),
+        pb.collection("categories").getFullList({ filter: `userId='${userId}'` }),
+        pb.collection("completions").getFullList({ filter: `userId='${userId}' && dateStr>='${cutoff}'` }),
       ]);
 
       if (cancelled) return;
@@ -105,7 +105,7 @@ export function useHabits(userId) {
       if (habitsRes.length === 0) {
         await migrateFromLocalStorage(userId);
         // After migration, re-fetch habits
-        const migrated = await pb.collection("habits").getFullList({ filter: `userId="${userId}"`, sort: "created" });
+        const migrated = await pb.collection("habits").getFullList({ filter: `userId='${userId}'` });
         if (!cancelled) {
           setHabits(migrated.map(recordToHabit));
           // If still empty, seed from default activity list (new user)
@@ -198,7 +198,7 @@ export function useHabits(userId) {
     });
     await pb.collection("habits").delete(id);
     // Clean up completions in background
-    pb.collection("completions").getFullList({ filter: `habitId="${id}"` })
+    pb.collection("completions").getFullList({ filter: `habitId='${id}'` })
       .then(records => Promise.all(records.map(r => pb.collection("completions").delete(r.id))))
       .catch(console.error);
   }, []);
@@ -217,7 +217,7 @@ export function useHabits(userId) {
     try {
       if (isDone) {
         const records = await pb.collection("completions").getList(1, 1, {
-          filter: `userId="${userId}" && habitId="${habitId}" && dateStr="${dateStr}"`,
+          filter: `userId='${userId}' && habitId='${habitId}' && dateStr='${dateStr}'`,
         });
         if (records.items.length > 0) {
           await pb.collection("completions").delete(records.items[0].id);
