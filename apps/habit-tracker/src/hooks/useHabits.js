@@ -1,10 +1,10 @@
 import { useLocalStorage } from "./useLocalStorage";
 import { DEFAULT_CATEGORIES, generateId } from "../data/constants";
 
-export function useHabits() {
-  const [habits, setHabits] = useLocalStorage("habits", []);
-  const [categories, setCategories] = useLocalStorage("habit-categories", DEFAULT_CATEGORIES);
-  const [completions, setCompletions] = useLocalStorage("habit-completions", {});
+export function useHabits(userId) {
+  const [habits, setHabits] = useLocalStorage(`${userId}_habits`, []);
+  const [categories, setCategories] = useLocalStorage(`${userId}_habit-categories`, DEFAULT_CATEGORIES);
+  const [completions, setCompletions] = useLocalStorage(`${userId}_habit-completions`, {});
 
   function addHabit(habit) {
     setHabits((prev) => [

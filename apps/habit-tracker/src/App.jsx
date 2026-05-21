@@ -51,7 +51,7 @@ function AuthenticatedApp({ user }) {
     toggleCompletion,
     addCategory,
     getCategory,
-  } = useHabits();
+  } = useHabits(user.uid);
 
   const [dayOffset, setDayOffset] = useState(0);
   const [selectedHabit, setSelectedHabit] = useState(null);
