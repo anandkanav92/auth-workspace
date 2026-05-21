@@ -4,7 +4,7 @@ import CategoryBars from "./analytics/CategoryBars";
 import HabitLeaderboard from "./analytics/HabitLeaderboard";
 import Heatmap from "./analytics/Heatmap";
 
-export default function ProgressPage({ analytics, onHabitTap }) {
+export default function ProgressPage({ analytics, onHabitTap, onBack }) {
   const {
     completionRate,
     currentStreak,
@@ -19,8 +19,21 @@ export default function ProgressPage({ analytics, onHabitTap }) {
 
   return (
     <div style={{ padding: "0 16px 40px", maxWidth: 900, margin: "0 auto" }}>
-      {/* Page title */}
-      <div style={{ textAlign: "center", marginBottom: 20, paddingTop: 4 }}>
+      {/* Page header */}
+      <div style={{ position: "relative", textAlign: "center", marginBottom: 20, paddingTop: 4 }}>
+        {onBack && (
+          <button
+            onClick={onBack}
+            style={{
+              position: "absolute", left: 0, top: 4,
+              background: "none", border: "none",
+              fontSize: 18, color: "#999", cursor: "pointer",
+              padding: "4px 8px",
+            }}
+          >
+            ←
+          </button>
+        )}
         <h2 style={{
           fontSize: 18, fontWeight: 700, color: "#1a1a2e", margin: "0 0 2px",
         }}>
