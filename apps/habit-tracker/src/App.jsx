@@ -63,7 +63,7 @@ function AuthenticatedApp({ user }) {
   useEffect(() => {
     if (migratedRef.current) return;
     migratedRef.current = true;
-    migrateIfNeeded(habits, addHabit);
+    migrateIfNeeded(habits, addHabit, user.uid);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Computed values

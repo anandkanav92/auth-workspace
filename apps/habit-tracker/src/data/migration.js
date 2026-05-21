@@ -49,13 +49,14 @@ function getScheduledDays(activityId) {
   return days.sort((a, b) => a - b);
 }
 
-export function migrateIfNeeded(currentHabits, addHabit) {
-  if (localStorage.getItem("habits-migrated")) {
+export function migrateIfNeeded(currentHabits, addHabit, userId) {
+  const flagKey = `${userId}_habits-migrated`;
+  if (localStorage.getItem(flagKey)) {
     return;
   }
 
   if (currentHabits.length > 0) {
-    localStorage.setItem("habits-migrated", "true");
+    localStorage.setItem(flagKey, "true");
     return;
   }
 
@@ -93,5 +94,5 @@ export function migrateIfNeeded(currentHabits, addHabit) {
     });
   });
 
-  localStorage.setItem("habits-migrated", "true");
+  localStorage.setItem(flagKey, "true");
 }
