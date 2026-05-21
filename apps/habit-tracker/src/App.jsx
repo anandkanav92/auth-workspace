@@ -568,7 +568,7 @@ function AuthenticatedApp({ user }) {
 
         {/* Page 1: Progress */}
         <div style={{ width: "50%", minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
-          <ProgressPage analytics={analytics} onHabitTap={handleLeaderboardTap} />
+          <ProgressPage analytics={analytics} onHabitTap={handleLeaderboardTap} onBack={() => setPageIndex(0)} />
         </div>
       </div>
 
@@ -600,22 +600,46 @@ function AuthenticatedApp({ user }) {
         </button>
       )}
 
-      {/* Page indicator dots */}
+      {/* Bottom tab bar */}
       <div style={{
-        position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)",
-        display: "flex", gap: 8, zIndex: 800,
+        position: "fixed", bottom: 0, left: 0, right: 0,
+        display: "flex", justifyContent: "center",
+        background: "#ffffffee", backdropFilter: "blur(8px)",
+        borderTop: "1px solid #e8e8f0",
+        zIndex: 800,
+        padding: "8px 0 env(safe-area-inset-bottom, 8px)",
       }}>
-        {[0, 1].map(i => (
-          <div
-            key={i}
-            onClick={() => setPageIndex(i)}
+        {[
+          { idx: 0, label: "Today", icon: "📋" },
+          { idx: 1, label: "Progress", icon: "📊" },
+        ].map(tab => (
+          <button
+            key={tab.idx}
+            onClick={() => setPageIndex(tab.idx)}
             style={{
-              width: 8, height: 8, borderRadius: "50%",
-              background: pageIndex === i ? "#3B82F6" : "#d0d0e0",
-              cursor: "pointer",
-              transition: "background 0.2s ease",
+              flex: 1, maxWidth: 160,
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+              background: "none", border: "none", cursor: "pointer",
+              padding: "6px 0",
+              opacity: pageIndex === tab.idx ? 1 : 0.5,
             }}
-          />
+          >
+            <span style={{ fontSize: 18 }}>{tab.icon}</span>
+            <span style={{
+              fontSize: 10, fontWeight: 600,
+              color: pageIndex === tab.idx ? "#3B82F6" : "#999",
+              fontFamily: "'Space Mono', monospace",
+              letterSpacing: "0.3px",
+            }}>
+              {tab.label}
+            </span>
+            {pageIndex === tab.idx && (
+              <div style={{
+                width: 4, height: 4, borderRadius: "50%",
+                background: "#3B82F6", marginTop: 1,
+              }} />
+            )}
+          </button>
         ))}
       </div>
 

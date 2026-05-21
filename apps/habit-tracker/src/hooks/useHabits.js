@@ -12,6 +12,7 @@ function cutoffDate() {
 function recordToHabit(r) {
   return {
     id: r.id,
+    userId: r.userId || "",
     name: r.name,
     icon: r.icon || "",
     categoryId: r.categoryId || "",
@@ -247,10 +248,21 @@ export function useHabits(userId) {
     return categories.find(c => c.id === categoryId) || categories[0];
   }, [categories]);
 
+  // Safety filter: ensure only this user's data is returned,
+  // even if PocketBase query or realtime subscription leaks other users' records.
+  const userHabits = habits.filter(h => h.userId === userId);
+  const userHabitIds = new Set(userHabits.map(h => h.id));
+  const userCompletions = {};
+  for (const key of Object.keys(completions)) {
+    // Key format: "${habitId}-YYYY-MM-DD" — strip the date suffix to get habitId
+    const habitId = key.replace(/-\d{4}-\d{2}-\d{2}$/, "");
+    if (userHabitIds.has(habitId)) userCompletions[key] = completions[key];
+  }
+
   return {
-    habits,
+    habits: userHabits,
     categories,
-    completions,
+    completions: userCompletions,
     loading,
     addHabit,
     updateHabit,
