@@ -7,7 +7,7 @@ const MAX_SECONDS = 300; // 5 min max
 // Mobile browsers require AudioContext to start from a user gesture.
 let audioCtx = null;
 
-function unlockAudio() {
+export function unlockAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
@@ -17,7 +17,7 @@ function unlockAudio() {
   }
 }
 
-function playAlarm() {
+export function playAlarm() {
   try {
     if (!audioCtx) unlockAudio();
     if (audioCtx.state === "suspended") audioCtx.resume();
@@ -47,7 +47,7 @@ function playAlarm() {
   }
 }
 
-function formatTime(seconds) {
+export function formatTime(seconds) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
@@ -63,53 +63,13 @@ function secondsToAngle(seconds) {
   return (seconds / MAX_SECONDS) * 360;
 }
 
-export default function Timer() {
-  const [totalSeconds, setTotalSeconds] = useState(60);
-  const [remaining, setRemaining] = useState(60);
-  const [running, setRunning] = useState(false);
-  const [collapsed, setCollapsed] = useState(true);
+/**
+ * RestTimer — renders the circular dial, preset chips, and play/pause/reset controls.
+ * All state is managed by the parent; this is a controlled component.
+ */
+export default function RestTimer({ totalSeconds, remaining, running, onSetTime, onPlay, onPause, onReset }) {
   const [dragging, setDragging] = useState(false);
   const circleRef = useRef(null);
-  const intervalRef = useRef(null);
-
-  // Countdown logic
-  useEffect(() => {
-    if (running && remaining > 0) {
-      intervalRef.current = setInterval(() => {
-        setRemaining((prev) => {
-          if (prev <= 1) {
-            setRunning(false);
-            playAlarm();
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(intervalRef.current);
-  }, [running, remaining]);
-
-  const play = () => {
-    unlockAudio(); // Must happen inside a user tap/click to work on mobile
-    if (remaining === 0) {
-      setRemaining(totalSeconds);
-    }
-    setRunning(true);
-  };
-
-  const pause = () => setRunning(false);
-
-  const reset = () => {
-    setRunning(false);
-    setRemaining(totalSeconds);
-  };
-
-  const setPreset = (secs) => {
-    setRunning(false);
-    setTotalSeconds(secs);
-    setRemaining(secs);
-  };
 
   // Drag handling for the circular dial
   const getAngleFromEvent = useCallback((clientX, clientY) => {
@@ -133,8 +93,7 @@ export default function Timer() {
     const angle = getAngleFromEvent(touch.clientX, touch.clientY);
     const secs = angleToSeconds(angle);
     const snapped = Math.round(secs / 5) * 5 || 5;
-    setTotalSeconds(snapped);
-    setRemaining(snapped);
+    onSetTime(snapped);
   };
 
   const handleDragMove = useCallback((e) => {
@@ -144,9 +103,8 @@ export default function Timer() {
     const angle = getAngleFromEvent(touch.clientX, touch.clientY);
     const secs = angleToSeconds(angle);
     const snapped = Math.round(secs / 5) * 5 || 5;
-    setTotalSeconds(snapped);
-    setRemaining(snapped);
-  }, [dragging, getAngleFromEvent]);
+    onSetTime(snapped);
+  }, [dragging, getAngleFromEvent, onSetTime]);
 
   const handleDragEnd = useCallback(() => {
     setDragging(false);
@@ -178,97 +136,8 @@ export default function Timer() {
   const isFinished = remaining === 0 && !running;
   const timerColor = isFinished ? "#E8453C" : running ? "#10B981" : "#3B82F6";
 
-  // Collapsed mini view
-  if (collapsed) {
-    return (
-      <div
-        onClick={() => setCollapsed(false)}
-        style={{
-          maxWidth: 900, margin: "0 auto 12px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "10px 16px", background: "#ffffff",
-          border: `1px solid ${running ? "#a7f3d020" : "#e8e8f0"}`,
-          borderRadius: 12, cursor: "pointer",
-          boxShadow: running ? `0 1px 8px ${timerColor}15` : "0 1px 3px rgba(0,0,0,0.04)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            background: `${timerColor}12`, border: `1px solid ${timerColor}30`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14,
-          }}>
-            {running ? "⏱" : isFinished ? "🔔" : "⏱"}
-          </div>
-          <div>
-            <span style={{
-              fontSize: 18, fontWeight: 700, color: timerColor,
-              fontFamily: "'Space Mono', monospace",
-            }}>
-              {formatTime(remaining)}
-            </span>
-            {running && (
-              <span style={{ fontSize: 10, color: "#10B981", marginLeft: 8, fontWeight: 600 }}>
-                RUNNING
-              </span>
-            )}
-            {isFinished && (
-              <span style={{ fontSize: 10, color: "#E8453C", marginLeft: 8, fontWeight: 600 }}>
-                DONE!
-              </span>
-            )}
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {!running && !isFinished && (
-            <button
-              onClick={(e) => { e.stopPropagation(); play(); }}
-              style={{
-                width: 32, height: 32, borderRadius: 8, border: "none",
-                background: "#10B981", color: "#fff", fontSize: 14,
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-              }}
-            >▶</button>
-          )}
-          {running && (
-            <button
-              onClick={(e) => { e.stopPropagation(); pause(); }}
-              style={{
-                width: 32, height: 32, borderRadius: 8, border: "none",
-                background: "#F59E0B", color: "#fff", fontSize: 12,
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                fontWeight: 700,
-              }}
-            >⏸</button>
-          )}
-          <span style={{ color: "#ccc", fontSize: 14, marginLeft: 4 }}>▾</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Expanded view
   return (
-    <div style={{
-      maxWidth: 900, margin: "0 auto 16px",
-      background: "#ffffff", border: "1px solid #e8e8f0",
-      borderRadius: 16, padding: "20px 16px 16px",
-      boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
-    }}>
-      {/* Collapse button */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#555" }}>Rest Timer</span>
-        <button
-          onClick={() => setCollapsed(true)}
-          style={{
-            background: "#f5f5fa", border: "1px solid #e0e0eb",
-            borderRadius: 6, padding: "4px 8px", fontSize: 12,
-            color: "#999", cursor: "pointer",
-          }}
-        >▴ Minimize</button>
-      </div>
-
+    <div>
       {/* Circular dial + time */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24 }}>
         <div style={{ position: "relative", width: 120, height: 120, flexShrink: 0 }}>
@@ -332,7 +201,7 @@ export default function Timer() {
         {/* Controls */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
           {!running ? (
-            <button onClick={play} style={{
+            <button onClick={onPlay} style={{
               width: 52, height: 52, borderRadius: "50%", border: "none",
               background: "linear-gradient(135deg, #10B981, #059669)",
               color: "#fff", fontSize: 20, cursor: "pointer",
@@ -340,7 +209,7 @@ export default function Timer() {
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>▶</button>
           ) : (
-            <button onClick={pause} style={{
+            <button onClick={onPause} style={{
               width: 52, height: 52, borderRadius: "50%", border: "none",
               background: "linear-gradient(135deg, #F59E0B, #D97706)",
               color: "#fff", fontSize: 16, cursor: "pointer",
@@ -349,7 +218,7 @@ export default function Timer() {
               fontWeight: 700,
             }}>⏸</button>
           )}
-          <button onClick={reset} style={{
+          <button onClick={onReset} style={{
             width: 36, height: 36, borderRadius: "50%", border: "1px solid #e0e0eb",
             background: "#f9f9fc", color: "#888", fontSize: 13, cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -363,7 +232,7 @@ export default function Timer() {
           const isActive = totalSeconds === secs && !running;
           const label = secs >= 60 ? `${secs / 60}m` : `${secs}s`;
           return (
-            <button key={secs} onClick={() => setPreset(secs)} style={{
+            <button key={secs} onClick={() => onSetTime(secs)} style={{
               padding: "6px 12px", borderRadius: 8,
               border: isActive ? `1px solid #3B82F640` : "1px solid #e0e0eb",
               background: isActive ? "#3B82F610" : "#f9f9fc",

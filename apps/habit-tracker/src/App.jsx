@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth, signOut } from "@myorg/auth-google";
 import { useHabits } from "./hooks/useHabits";
-import Timer from "./components/Timer";
+import { unlockAudio, playAlarm } from "./components/Timer";
+import FloatingTimerPill from "./components/FloatingTimerPill";
 import HabitForm from "./components/HabitForm";
 import HabitDetail from "./components/HabitDetail";
 import StreakDots from "./components/StreakDots";
@@ -58,6 +59,55 @@ function AuthenticatedApp({ user }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
 
+  // Timer state — lifted here so both HabitDetail and FloatingTimerPill can access it
+  const [timerState, setTimerState] = useState({
+    totalSeconds: 60,
+    remaining: 60,
+    running: false,
+    habitId: null,
+    habitName: null,
+  });
+
+  function setTimerTime(seconds) {
+    setTimerState(prev => ({ ...prev, totalSeconds: seconds, remaining: seconds, running: false }));
+  }
+
+  function startTimer(habitId, habitName) {
+    unlockAudio(); // Must happen inside a user tap/click to work on mobile
+    setTimerState(prev => ({
+      ...prev,
+      running: true,
+      habitId: habitId || prev.habitId,
+      habitName: habitName || prev.habitName,
+      remaining: prev.remaining === 0 ? prev.totalSeconds : prev.remaining,
+    }));
+  }
+
+  function pauseTimer() {
+    setTimerState(prev => ({ ...prev, running: false }));
+  }
+
+  function resetTimer() {
+    setTimerState(prev => ({ ...prev, running: false, remaining: prev.totalSeconds }));
+  }
+
+  // Countdown interval
+  useEffect(() => {
+    if (timerState.running && timerState.remaining > 0) {
+      const id = setInterval(() => {
+        setTimerState(prev => {
+          if (prev.remaining <= 1) {
+            playAlarm();
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+            return { ...prev, remaining: 0, running: false };
+          }
+          return { ...prev, remaining: prev.remaining - 1 };
+        });
+      }, 1000);
+      return () => clearInterval(id);
+    }
+  }, [timerState.running, timerState.remaining]);
+
   const migratedRef = useRef(false);
 
   useEffect(() => {
@@ -103,10 +153,21 @@ function AuthenticatedApp({ user }) {
         rel="stylesheet"
       />
 
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        {/* Timer */}
-        <Timer />
+      {/* Floating timer pill — visible when timer runs and no detail sheet is open */}
+      {timerState.running && !selectedHabit && (
+        <FloatingTimerPill
+          remaining={timerState.remaining}
+          habitName={timerState.habitName}
+          running={timerState.running}
+          onPause={pauseTimer}
+          onTap={() => {
+            const habit = habits.find(h => h.id === timerState.habitId);
+            if (habit) setSelectedHabit(habit);
+          }}
+        />
+      )}
 
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
         {/* User bar */}
         <div style={{
           display: "flex",
@@ -481,6 +542,11 @@ function AuthenticatedApp({ user }) {
           onToggleOccurrence={(dateString) =>
             toggleCompletion(selectedHabit.id, dateString)
           }
+          timerState={timerState}
+          onSetTime={setTimerTime}
+          onStartTimer={() => startTimer(selectedHabit.id, selectedHabit.name)}
+          onPauseTimer={pauseTimer}
+          onResetTimer={resetTimer}
         />
       )}
 

@@ -1,7 +1,8 @@
 import StreakDots from "./StreakDots";
+import RestTimer from "./Timer";
 import { DAYS } from "../data/constants";
 
-export default function HabitDetail({ habit, category, occurrences, onClose, onEdit, onToggleOccurrence }) {
+export default function HabitDetail({ habit, category, occurrences, onClose, onEdit, onToggleOccurrence, timerState, onSetTime, onStartTimer, onPauseTimer, onResetTimer }) {
   const scheduledLabel =
     habit.days.length === 7
       ? "Daily"
@@ -88,6 +89,27 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
               Tap a dot to toggle
             </p>
           </div>
+
+          {/* Rest Timer */}
+          {timerState && (
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{
+                fontSize: 11, fontWeight: 700, color: "#888", marginBottom: 10,
+                fontFamily: "'Space Mono', monospace", letterSpacing: "1px",
+              }}>
+                REST TIMER
+              </h3>
+              <RestTimer
+                totalSeconds={timerState.totalSeconds}
+                remaining={timerState.remaining}
+                running={timerState.running}
+                onSetTime={onSetTime}
+                onPlay={onStartTimer}
+                onPause={onPauseTimer}
+                onReset={onResetTimer}
+              />
+            </div>
+          )}
 
           {/* Notes (conditional) */}
           {habit.notes && (
