@@ -61,7 +61,7 @@ function AuthenticatedApp({ user }) {
     toggleVacation,
   } = useHabits(user.uid);
 
-  const analytics = useAnalytics(habits, completions, categories);
+  const analytics = useAnalytics(habits, completions, categories, vacationMode, vacationStart);
 
   const [dayOffset, setDayOffset] = useState(0);
   const [selectedHabit, setSelectedHabit] = useState(null);
