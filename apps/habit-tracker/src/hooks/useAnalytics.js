@@ -12,13 +12,14 @@ function getLastNDays(n) {
   return days;
 }
 
-/** Count scheduled and completed for a given set of dates. */
-function computeRates(habits, completions, dates) {
+/** Count scheduled and completed for a given set of dates. If vacationCheck is provided, skip dates where it returns true. */
+function computeRates(habits, completions, dates, vacationCheck) {
   let scheduled = 0;
   let completed = 0;
   for (const date of dates) {
-    const ourDay = getJsDayToOurDay(date.getDay());
     const dateStr = toDateStr(date);
+    if (vacationCheck && vacationCheck(dateStr)) continue;
+    const ourDay = getJsDayToOurDay(date.getDay());
     for (const habit of habits) {
       if (habit.days.includes(ourDay)) {
         scheduled++;
@@ -29,8 +30,12 @@ function computeRates(habits, completions, dates) {
   return { scheduled, completed, pct: scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0 };
 }
 
-export function useAnalytics(habits, completions, categories) {
+export function useAnalytics(habits, completions, categories, vacationMode, vacationStart) {
   return useMemo(() => {
+    /** Returns true if vacationMode is on and dateStr falls on or after vacationStart. */
+    const isDuringVacation = (dateStr) =>
+      vacationMode && vacationStart && dateStr >= vacationStart;
+
     if (habits.length === 0) {
       return {
         completionRate: 0,
@@ -51,7 +56,7 @@ export function useAnalytics(habits, completions, categories) {
     const last84 = getLastNDays(84);
 
     // --- Summary cards ---
-    const { pct: completionRate } = computeRates(habits, completions, last30);
+    const { pct: completionRate } = computeRates(habits, completions, last30, isDuringVacation);
 
     // Current streak: walk backward from today, count days where at least 1 habit was completed
     // Streak freeze: 1 missed scheduled day per ISO week is forgiven (don't count, don't break)
@@ -62,6 +67,7 @@ export function useAnalytics(habits, completions, categories) {
       d.setDate(d.getDate() - i);
       const ourDay = getJsDayToOurDay(d.getDay());
       const dateStr = toDateStr(d);
+      if (isDuringVacation(dateStr)) continue;
       const todaysHabits = habits.filter(h => h.days.includes(ourDay));
       if (todaysHabits.length === 0) continue; // skip days with nothing scheduled
       const anyDone = todaysHabits.some(h => completions[`${h.id}-${dateStr}`]);
@@ -132,7 +138,7 @@ export function useAnalytics(habits, completions, categories) {
     for (const cat of categories) {
       const catHabits = habits.filter(h => h.categoryId === cat.id);
       if (catHabits.length === 0) continue;
-      const { pct } = computeRates(catHabits, completions, last30);
+      const { pct } = computeRates(catHabits, completions, last30, isDuringVacation);
       catMap[cat.id] = { id: cat.id, name: cat.name, color: cat.color, pct };
     }
     const categoryStats = Object.values(catMap).sort((a, b) => b.pct - a.pct);
@@ -140,7 +146,7 @@ export function useAnalytics(habits, completions, categories) {
     // --- Habit leaderboard (last 30 days) ---
     const habitStats = habits
       .map(habit => {
-        const { scheduled, completed, pct } = computeRates([habit], completions, last30);
+        const { scheduled, completed, pct } = computeRates([habit], completions, last30, isDuringVacation);
         if (scheduled < 3) return null; // skip habits with < 3 scheduled occurrences
 
         // Current streak for this habit (with freeze: 1 miss per ISO week forgiven)
@@ -152,6 +158,7 @@ export function useAnalytics(habits, completions, categories) {
           const ourDay = getJsDayToOurDay(d.getDay());
           if (!habit.days.includes(ourDay)) continue;
           const dateStr = toDateStr(d);
+          if (isDuringVacation(dateStr)) continue;
           if (completions[`${habit.id}-${dateStr}`]) {
             streak++;
           } else {
@@ -181,6 +188,14 @@ export function useAnalytics(habits, completions, categories) {
     const heatmapData = last84.map(date => {
       const ourDay = getJsDayToOurDay(date.getDay());
       const dateStr = toDateStr(date);
+      if (isDuringVacation(dateStr)) {
+        return {
+          date: dateStr,
+          pct: -2, // special value for vacation day styling
+          month: date.toLocaleDateString("en-GB", { month: "short" }),
+          dayOfWeek: ourDay,
+        };
+      }
       let scheduled = 0, completed = 0;
       for (const habit of habits) {
         if (habit.days.includes(ourDay)) {
@@ -207,5 +222,5 @@ export function useAnalytics(habits, completions, categories) {
       habitStats,
       heatmapData,
     };
-  }, [habits, completions, categories]);
+  }, [habits, completions, categories, vacationMode, vacationStart]);
 }
