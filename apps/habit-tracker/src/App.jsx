@@ -8,6 +8,7 @@ import HabitForm from "./components/HabitForm";
 import HabitDetail from "./components/HabitDetail";
 import StreakDots from "./components/StreakDots";
 import LoginPage from "./components/LoginPage";
+import CompletionNotes from "./components/CompletionNotes";
 import ProgressPage from "./components/ProgressPage";
 import {
   getDateForOffset,
@@ -52,6 +53,7 @@ function AuthenticatedApp({ user }) {
     updateHabit,
     deleteHabit,
     toggleCompletion,
+    updateCompletion,
     addCategory,
     getCategory,
   } = useHabits(user.uid);
@@ -62,6 +64,8 @@ function AuthenticatedApp({ user }) {
   const [selectedHabit, setSelectedHabit] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
+  const [completionNotesHabit, setCompletionNotesHabit] = useState(null);
+  const [completionNotesDateStr, setCompletionNotesDateStr] = useState(null);
 
   // Swipe navigation: 0 = daily view, 1 = progress page
   const [pageIndex, setPageIndex] = useState(0);
@@ -448,7 +452,14 @@ function AuthenticatedApp({ user }) {
                             <div
                               onClick={(e) => {
                                 e.stopPropagation();
+                                const key = `${habit.id}-${dateStr}`;
+                                const isDone = !!completions[key];
                                 toggleCompletion(habit.id, dateStr);
+                                // Show notes sheet only when completing (not uncompleting)
+                                if (!isDone) {
+                                  setCompletionNotesHabit(habit);
+                                  setCompletionNotesDateStr(dateStr);
+                                }
                               }}
                               style={{
                                 width: 24,
@@ -694,6 +705,22 @@ function AuthenticatedApp({ user }) {
             setEditingHabit(null);
           }}
           onAddCategory={addCategory}
+        />
+      )}
+
+      {/* Completion notes sheet */}
+      {completionNotesHabit && (
+        <CompletionNotes
+          habit={completionNotesHabit}
+          onSave={({ effort, notes }) => {
+            updateCompletion(completionNotesHabit.id, completionNotesDateStr, { effort, notes });
+            setCompletionNotesHabit(null);
+            setCompletionNotesDateStr(null);
+          }}
+          onSkip={() => {
+            setCompletionNotesHabit(null);
+            setCompletionNotesDateStr(null);
+          }}
         />
       )}
     </div>
