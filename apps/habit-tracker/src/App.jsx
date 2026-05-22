@@ -56,6 +56,9 @@ function AuthenticatedApp({ user }) {
     updateCompletion,
     addCategory,
     getCategory,
+    vacationMode,
+    vacationStart,
+    toggleVacation,
   } = useHabits(user.uid);
 
   const analytics = useAnalytics(habits, completions, categories);
@@ -66,6 +69,7 @@ function AuthenticatedApp({ user }) {
   const [editingHabit, setEditingHabit] = useState(null);
   const [completionNotesHabit, setCompletionNotesHabit] = useState(null);
   const [completionNotesDateStr, setCompletionNotesDateStr] = useState(null);
+  const [showVacationConfirm, setShowVacationConfirm] = useState(false);
 
   // Swipe navigation: 0 = daily view, 1 = progress page
   const [pageIndex, setPageIndex] = useState(0);
@@ -263,18 +267,72 @@ function AuthenticatedApp({ user }) {
                   {user.displayName || user.email}
                 </span>
               </div>
-              <button
-                onClick={() => signOut()}
-                style={{
-                  background: "none", border: "1px solid #e0e0eb",
-                  borderRadius: 8, padding: "4px 12px",
-                  fontSize: 12, color: "#999", cursor: "pointer",
-                  fontFamily: "'Space Mono', monospace",
-                }}
-              >
-                Sign out
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    if (vacationMode) {
+                      toggleVacation(); // Resume immediately, no confirmation needed
+                    } else {
+                      setShowVacationConfirm(true);
+                    }
+                  }}
+                  style={{
+                    background: vacationMode ? "#fef3c7" : "none",
+                    border: `1px solid ${vacationMode ? "#f59e0b" : "#e0e0eb"}`,
+                    borderRadius: 8, padding: "4px 10px",
+                    fontSize: 12, color: vacationMode ? "#d97706" : "#999",
+                    cursor: "pointer", fontFamily: "'Space Mono', monospace",
+                  }}
+                >
+                  {vacationMode ? "🏖️ On" : "🏖️"}
+                </button>
+                <button
+                  onClick={() => signOut()}
+                  style={{
+                    background: "none", border: "1px solid #e0e0eb",
+                    borderRadius: 8, padding: "4px 12px",
+                    fontSize: 12, color: "#999", cursor: "pointer",
+                    fontFamily: "'Space Mono', monospace",
+                  }}
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
+
+            {/* Vacation banner */}
+            {vacationMode && (
+              <div style={{
+                background: "linear-gradient(135deg, #fef3c7, #fde68a)",
+                border: "1px solid #f59e0b40",
+                borderRadius: 12, padding: "12px 16px",
+                marginBottom: 12, textAlign: "center",
+              }}>
+                <div style={{ fontSize: 20, marginBottom: 4 }}>🏖️</div>
+                <div style={{
+                  fontSize: 13, fontWeight: 600, color: "#92400e",
+                }}>
+                  Vacation mode — habits paused
+                </div>
+                <div style={{
+                  fontSize: 11, color: "#a16207",
+                  fontFamily: "'Space Mono', monospace", marginTop: 2,
+                }}>
+                  Streaks are preserved · since {vacationStart || "today"}
+                </div>
+                <button
+                  onClick={() => toggleVacation()}
+                  style={{
+                    marginTop: 8, padding: "6px 20px", borderRadius: 8,
+                    border: "none", background: "#92400e", color: "#fff",
+                    fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    fontFamily: "'DM Sans', sans-serif",
+                  }}
+                >
+                  Resume habits
+                </button>
+              </div>
+            )}
 
             {/* Date Header */}
             <div
@@ -446,6 +504,8 @@ function AuthenticatedApp({ user }) {
                               border: `1px solid ${isChecked ? "#a7f3d0" : "#e8e8f0"}`,
                               marginBottom: 6,
                               cursor: "pointer",
+                              opacity: vacationMode ? 0.4 : 1,
+                              pointerEvents: vacationMode ? "none" : "auto",
                             }}
                           >
                             {/* Checkbox */}
@@ -722,6 +782,60 @@ function AuthenticatedApp({ user }) {
             setCompletionNotesDateStr(null);
           }}
         />
+      )}
+
+      {/* Vacation confirmation */}
+      {showVacationConfirm && (
+        <div
+          onClick={() => setShowVacationConfirm(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)",
+            zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff", borderRadius: 16, padding: "24px 20px",
+              maxWidth: 320, width: "90%", textAlign: "center",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+            }}
+          >
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🏖️</div>
+            <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: "#1a1a2e" }}>
+              Enable vacation mode?
+            </h3>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#888", lineHeight: 1.5 }}>
+              All habits will be paused. Your streaks will be preserved until you resume.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setShowVacationConfirm(false)}
+                style={{
+                  flex: 1, padding: "10px 0", borderRadius: 8,
+                  border: "1px solid #e0e0eb", background: "#f9f9fc",
+                  fontSize: 13, fontWeight: 600, color: "#999", cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  toggleVacation();
+                  setShowVacationConfirm(false);
+                }}
+                style={{
+                  flex: 1, padding: "10px 0", borderRadius: 8,
+                  border: "none", background: "#f59e0b",
+                  fontSize: 13, fontWeight: 600, color: "#fff", cursor: "pointer",
+                }}
+              >
+                Enable
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
