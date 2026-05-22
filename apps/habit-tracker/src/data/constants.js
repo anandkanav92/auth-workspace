@@ -65,7 +65,7 @@ export function getLast5Occurrences(habit, completions, viewDate) {
   const maxLookbackDays = 90;
 
   const cursor = new Date(viewDate);
-  cursor.setDate(cursor.getDate() - 1); // start from day before viewDate
+  cursor.setDate(cursor.getDate() - 1);
 
   for (let i = 0; i < maxLookbackDays && results.length < maxOccurrences; i++) {
     const ourDay = getJsDayToOurDay(cursor.getDay());
@@ -73,9 +73,12 @@ export function getLast5Occurrences(habit, completions, viewDate) {
     if (habit.days.includes(ourDay)) {
       const dateStr = toDateStr(cursor);
       const key = `${habit.id}-${dateStr}`;
+      const completion = completions[key];
       results.push({
         date: dateStr,
-        done: !!completions[key],
+        done: !!completion,
+        effort: completion ? (completion.effort ?? null) : null,
+        notes: completion ? (completion.notes || "") : "",
       });
     }
 

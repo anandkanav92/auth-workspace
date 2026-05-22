@@ -86,7 +86,7 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
             </h3>
             <StreakDots occurrences={occurrences} size="large" onToggle={onToggleOccurrence} />
             <p style={{ margin: "8px 0 0", fontSize: 10, color: "#ccc", fontFamily: "'Space Mono', monospace" }}>
-              Tap a dot to toggle
+              Tap a dot to toggle · blue line = has notes
             </p>
           </div>
 
