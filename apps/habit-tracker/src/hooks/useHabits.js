@@ -83,6 +83,9 @@ export function useHabits(userId) {
   const [customCategories, setCustomCategories] = useState([]);
   const [completions, setCompletions] = useState({});
   const [loading, setLoading] = useState(true);
+  const [vacationMode, setVacationMode] = useState(false);
+  const [vacationStart, setVacationStart] = useState(null);
+  const [settingsRecordId, setSettingsRecordId] = useState(null);
 
   const categories = [...DEFAULT_CATEGORIES, ...customCategories];
 
@@ -93,10 +96,11 @@ export function useHabits(userId) {
 
     async function init() {
       const cutoff = cutoffDate();
-      const [habitsRes, catsRes, compsRes] = await Promise.all([
-        pb.collection("habits").getFullList({ filter: `userId='${userId}'` }),
-        pb.collection("categories").getFullList({ filter: `userId='${userId}'` }),
+      const [habitsRes, catsRes, compsRes, settingsRes] = await Promise.all([
+        pb.collection("habits").getFullList({ filter: `userId='${userId}'`, sort: "created" }),
+        pb.collection("categories").getFullList({ filter: `userId='${userId}'`, sort: "created" }),
         pb.collection("completions").getFullList({ filter: `userId='${userId}' && dateStr>='${cutoff}'` }),
+        pb.collection("user_settings").getList(1, 1, { filter: `userId='${userId}'` }).catch(() => ({ items: [] })),
       ]);
 
       if (cancelled) return;
@@ -128,6 +132,15 @@ export function useHabits(userId) {
           };
         });
         setCompletions(compsMap);
+
+        // Load vacation state
+        if (settingsRes.items.length > 0) {
+          const s = settingsRes.items[0];
+          setSettingsRecordId(s.id);
+          setVacationMode(!!s.vacationMode);
+          setVacationStart(s.vacationStart || null);
+        }
+
         setLoading(false);
       }
 
@@ -168,6 +181,19 @@ export function useHabits(userId) {
           return next;
         });
       });
+
+      pb.collection("user_settings").subscribe("*", (e) => {
+        if (e.record.userId !== userId) return;
+        if (e.action === "delete") {
+          setVacationMode(false);
+          setVacationStart(null);
+          setSettingsRecordId(null);
+        } else {
+          setSettingsRecordId(e.record.id);
+          setVacationMode(!!e.record.vacationMode);
+          setVacationStart(e.record.vacationStart || null);
+        }
+      });
     }
 
     init().catch(err => {
@@ -180,6 +206,7 @@ export function useHabits(userId) {
       pb.collection("habits").unsubscribe("*");
       pb.collection("categories").unsubscribe("*");
       pb.collection("completions").unsubscribe("*");
+      pb.collection("user_settings").unsubscribe("*");
     };
   }, [userId]);
 
@@ -286,6 +313,36 @@ export function useHabits(userId) {
     }
   }, [completions]);
 
+  const toggleVacation = useCallback(async () => {
+    const newMode = !vacationMode;
+    const newStart = newMode ? toDateStr(new Date()) : null;
+
+    // Optimistic
+    setVacationMode(newMode);
+    setVacationStart(newStart);
+
+    try {
+      if (settingsRecordId) {
+        await pb.collection("user_settings").update(settingsRecordId, {
+          vacationMode: newMode,
+          vacationStart: newStart,
+        });
+      } else {
+        const record = await pb.collection("user_settings").create({
+          userId,
+          vacationMode: newMode,
+          vacationStart: newStart,
+        });
+        setSettingsRecordId(record.id);
+      }
+    } catch (err) {
+      // Revert
+      setVacationMode(!newMode);
+      setVacationStart(newMode ? null : vacationStart);
+      console.error("toggleVacation failed:", err);
+    }
+  }, [userId, vacationMode, vacationStart, settingsRecordId]);
+
   const addCategory = useCallback(async (category) => {
     await pb.collection("categories").create({
       userId,
@@ -321,5 +378,8 @@ export function useHabits(userId) {
     updateCompletion,
     addCategory,
     getCategory,
+    vacationMode,
+    vacationStart,
+    toggleVacation,
   };
 }
