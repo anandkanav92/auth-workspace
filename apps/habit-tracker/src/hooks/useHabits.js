@@ -120,7 +120,13 @@ export function useHabits(userId) {
       if (!cancelled) {
         setCustomCategories(catsRes.map(recordToCategory));
         const compsMap = {};
-        compsRes.forEach(r => { compsMap[`${r.habitId}-${r.dateStr}`] = true; });
+        compsRes.forEach(r => {
+          compsMap[`${r.habitId}-${r.dateStr}`] = {
+            id: r.id,
+            effort: r.effort ?? null,
+            notes: r.notes || "",
+          };
+        });
         setCompletions(compsMap);
         setLoading(false);
       }
@@ -152,7 +158,13 @@ export function useHabits(userId) {
         setCompletions(prev => {
           const next = { ...prev };
           if (e.action === "delete") { delete next[key]; }
-          else { next[key] = true; }
+          else {
+            next[key] = {
+              id: e.record.id,
+              effort: e.record.effort ?? null,
+              notes: e.record.notes || "",
+            };
+          }
           return next;
         });
       });
@@ -205,36 +217,74 @@ export function useHabits(userId) {
 
   const toggleCompletion = useCallback(async (habitId, dateStr) => {
     const key = `${habitId}-${dateStr}`;
-    const isDone = !!completions[key];
+    const existing = completions[key];
+    const isDone = !!existing;
 
     // Optimistic update
     setCompletions(prev => {
       const next = { ...prev };
-      if (isDone) { delete next[key]; } else { next[key] = true; }
+      if (isDone) { delete next[key]; }
+      else { next[key] = { id: "__pending__", effort: null, notes: "" }; }
       return next;
     });
 
     try {
       if (isDone) {
-        const records = await pb.collection("completions").getList(1, 1, {
-          filter: `userId="${userId}" && habitId="${habitId}" && dateStr="${dateStr}"`,
-        });
-        if (records.items.length > 0) {
-          await pb.collection("completions").delete(records.items[0].id);
+        const recordId = existing.id;
+        if (recordId && recordId !== "__pending__") {
+          await pb.collection("completions").delete(recordId);
+        } else {
+          const records = await pb.collection("completions").getList(1, 1, {
+            filter: `userId="${userId}" && habitId="${habitId}" && dateStr="${dateStr}"`,
+          });
+          if (records.items.length > 0) {
+            await pb.collection("completions").delete(records.items[0].id);
+          }
         }
       } else {
-        await pb.collection("completions").create({ userId, habitId, dateStr });
+        const record = await pb.collection("completions").create({ userId, habitId, dateStr });
+        // Update with real record ID (realtime sub may also do this, but be safe)
+        setCompletions(prev => {
+          const next = { ...prev };
+          if (next[key]) {
+            next[key] = { ...next[key], id: record.id };
+          }
+          return next;
+        });
       }
     } catch (err) {
       // Revert optimistic update on failure
       setCompletions(prev => {
         const next = { ...prev };
-        if (isDone) { next[key] = true; } else { delete next[key]; }
+        if (isDone) { next[key] = existing; } else { delete next[key]; }
         return next;
       });
       console.error("toggleCompletion failed:", err);
     }
   }, [userId, completions]);
+
+  const updateCompletion = useCallback(async (habitId, dateStr, data) => {
+    const key = `${habitId}-${dateStr}`;
+    const existing = completions[key];
+    if (!existing || !existing.id || existing.id === "__pending__") return;
+
+    // Optimistic update
+    setCompletions(prev => ({
+      ...prev,
+      [key]: { ...prev[key], ...data },
+    }));
+
+    try {
+      await pb.collection("completions").update(existing.id, data);
+    } catch (err) {
+      // Revert
+      setCompletions(prev => ({
+        ...prev,
+        [key]: existing,
+      }));
+      console.error("updateCompletion failed:", err);
+    }
+  }, [completions]);
 
   const addCategory = useCallback(async (category) => {
     await pb.collection("categories").create({
@@ -268,6 +318,7 @@ export function useHabits(userId) {
     updateHabit,
     deleteHabit,
     toggleCompletion,
+    updateCompletion,
     addCategory,
     getCategory,
   };
