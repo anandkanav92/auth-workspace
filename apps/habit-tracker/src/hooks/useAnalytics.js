@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { toDateStr, getJsDayToOurDay } from "../data/constants";
+import { toDateStr, getJsDayToOurDay, getISOWeekKey } from "../data/constants";
 
 /** Returns an array of Date objects for the last N days ending today. */
 function getLastNDays(n) {
@@ -54,7 +54,9 @@ export function useAnalytics(habits, completions, categories) {
     const { pct: completionRate } = computeRates(habits, completions, last30);
 
     // Current streak: walk backward from today, count days where at least 1 habit was completed
+    // Streak freeze: 1 missed scheduled day per ISO week is forgiven (don't count, don't break)
     let currentStreak = 0;
+    const freezeUsedGlobal = {};
     for (let i = 0; i < 365; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
@@ -63,8 +65,17 @@ export function useAnalytics(habits, completions, categories) {
       const todaysHabits = habits.filter(h => h.days.includes(ourDay));
       if (todaysHabits.length === 0) continue; // skip days with nothing scheduled
       const anyDone = todaysHabits.some(h => completions[`${h.id}-${dateStr}`]);
-      if (anyDone) currentStreak++;
-      else break;
+      if (anyDone) {
+        currentStreak++;
+      } else {
+        const weekKey = getISOWeekKey(d);
+        if (!freezeUsedGlobal[weekKey]) {
+          freezeUsedGlobal[weekKey] = true;
+          // Frozen day — don't count, don't break
+        } else {
+          break;
+        }
+      }
     }
 
     // Best day of week: average completion % per weekday over last 30 days
@@ -132,16 +143,25 @@ export function useAnalytics(habits, completions, categories) {
         const { scheduled, completed, pct } = computeRates([habit], completions, last30);
         if (scheduled < 3) return null; // skip habits with < 3 scheduled occurrences
 
-        // Current streak for this habit
+        // Current streak for this habit (with freeze: 1 miss per ISO week forgiven)
         let streak = 0;
+        const habitFreezeUsed = {};
         for (let i = 0; i < 90; i++) {
           const d = new Date();
           d.setDate(d.getDate() - i);
           const ourDay = getJsDayToOurDay(d.getDay());
           if (!habit.days.includes(ourDay)) continue;
           const dateStr = toDateStr(d);
-          if (completions[`${habit.id}-${dateStr}`]) streak++;
-          else break;
+          if (completions[`${habit.id}-${dateStr}`]) {
+            streak++;
+          } else {
+            const weekKey = getISOWeekKey(d);
+            if (!habitFreezeUsed[weekKey]) {
+              habitFreezeUsed[weekKey] = true;
+            } else {
+              break;
+            }
+          }
         }
 
         const cat = categories.find(c => c.id === habit.categoryId) || categories[0];
