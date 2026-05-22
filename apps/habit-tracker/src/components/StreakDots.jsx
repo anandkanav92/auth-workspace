@@ -28,7 +28,7 @@ export default function StreakDots({ occurrences, size = "small", onToggle }) {
                 } : undefined}
                 style={{
                   width: dotSize, height: dotSize, borderRadius: "50%",
-                  background: occ.done ? "#10B981" : "#E8453C",
+                  background: occ.status === "done" ? "#10B981" : occ.status === "frozen" ? "#93c5fd" : "#E8453C",
                   cursor: isLarge ? "pointer" : "default",
                   transition: "background 0.2s ease",
                 }}
@@ -40,7 +40,10 @@ export default function StreakDots({ occurrences, size = "small", onToggle }) {
                   background: "#3B82F6", marginTop: -2,
                 }} />
               )}
-              {isLarge && !hasNotes && <div style={{ height: 2 }} />}
+              {isLarge && occ.status === "frozen" && (
+                <div style={{ fontSize: 8, marginTop: -2 }}>❄️</div>
+              )}
+              {isLarge && !hasNotes && occ.status !== "frozen" && <div style={{ height: 2 }} />}
               {isLarge && (
                 <span style={{ fontSize: 9, color: "#aaa", fontFamily: "'Space Mono', monospace", whiteSpace: "nowrap" }}>
                   {formatShortDate(occ.date)}

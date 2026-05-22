@@ -35,6 +35,15 @@ export function getJsDayToOurDay(jsDay) {
   return (jsDay + 6) % 7;
 }
 
+/** Returns "YYYY-WNN" ISO week key for a given date. */
+export function getISOWeekKey(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
 /** Returns a Date for today + offset days */
 export function getDateForOffset(offset) {
   const date = new Date();
@@ -64,6 +73,9 @@ export function getLast5Occurrences(habit, completions, viewDate) {
   const maxOccurrences = 5;
   const maxLookbackDays = 90;
 
+  // Track freezes used per ISO week
+  const freezeUsed = {};
+
   const cursor = new Date(viewDate);
   cursor.setDate(cursor.getDate() - 1);
 
@@ -74,9 +86,23 @@ export function getLast5Occurrences(habit, completions, viewDate) {
       const dateStr = toDateStr(cursor);
       const key = `${habit.id}-${dateStr}`;
       const completion = completions[key];
+      const done = !!completion;
+
+      let status = "missed";
+      if (done) {
+        status = "done";
+      } else {
+        const weekKey = getISOWeekKey(cursor);
+        if (!freezeUsed[weekKey]) {
+          freezeUsed[weekKey] = true;
+          status = "frozen";
+        }
+      }
+
       results.push({
         date: dateStr,
-        done: !!completion,
+        done,
+        status, // "done" | "missed" | "frozen"
         effort: completion ? (completion.effort ?? null) : null,
         notes: completion ? (completion.notes || "") : "",
       });
