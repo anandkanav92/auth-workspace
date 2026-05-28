@@ -107,6 +107,26 @@ create_if_missing "notes" '{
   ]
 }'
 
+# --- notes_v2 ---
+create_if_missing "notes_v2" '{
+  "name": "notes_v2",
+  "type": "base",
+  "listRule": "",
+  "viewRule": "",
+  "createRule": "",
+  "updateRule": "",
+  "deleteRule": "",
+  "indexes": [
+    "CREATE INDEX idx_notes_v2_user_chapter ON notes_v2 (userId, chapterId)"
+  ],
+  "fields": [
+    {"type":"text","name":"userId","required":true},
+    {"type":"number","name":"chapterId","required":true},
+    {"type":"text","name":"text","required":true},
+    {"type":"text","name":"category","required":true}
+  ]
+}'
+
 # --- streaks ---
 create_if_missing "streaks" '{
   "name": "streaks",
