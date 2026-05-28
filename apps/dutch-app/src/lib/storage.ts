@@ -1,5 +1,6 @@
 import type { FlashCard } from "./srs";
 import type { Note, NoteCategory } from "@/types/chapter";
+import { categorizeNote } from "./note-categories";
 
 const KEYS = {
   flashcards: "dutch-app-flashcards",
@@ -138,6 +139,59 @@ export function deleteNoteV2(id: string): void {
     "dutch-app-notes-v2",
     all.filter((n) => n.id !== id)
   );
+}
+
+// --- Old-format localStorage migration ---
+
+export function migrateOldNotes(): void {
+  if (typeof window === "undefined") return;
+
+  // Skip if already migrated
+  if (localStorage.getItem("dutch-app-notes-v2-migrated")) return;
+
+  try {
+    const raw = localStorage.getItem("dutch-app-notes");
+    if (!raw) {
+      localStorage.setItem("dutch-app-notes-v2-migrated", "true");
+      return;
+    }
+
+    const oldNotes: Record<number, string> = JSON.parse(raw);
+    const newNotes: Note[] = [];
+    const now = new Date().toISOString();
+
+    for (const [chapterIdStr, text] of Object.entries(oldNotes)) {
+      if (!text || !text.trim()) continue;
+      const chapterId = Number(chapterIdStr);
+
+      // Split by newlines — each non-empty line becomes a separate note
+      const lines = text.split("\n").filter((line) => line.trim());
+      for (const line of lines) {
+        newNotes.push({
+          id: generateId(),
+          chapterId,
+          text: line.trim(),
+          category: categorizeNote(line.trim()),
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    if (newNotes.length > 0) {
+      // Merge with any existing v2 notes (don't overwrite)
+      const existing = getItem<Note[]>("dutch-app-notes-v2", []);
+      setItem("dutch-app-notes-v2", [...existing, ...newNotes]);
+    }
+
+    localStorage.setItem("dutch-app-notes-v2-migrated", "true");
+    console.log(
+      `[Notes migration] Migrated ${newNotes.length} notes from old format`
+    );
+  } catch (err) {
+    console.error("[Notes migration] Failed:", err);
+    // Don't set flag — will retry next time
+  }
 }
 
 export interface StreakData {

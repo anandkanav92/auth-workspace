@@ -1,5 +1,7 @@
 import * as ls from "./storage";
 import * as pbs from "./pb-storage";
+import { categorizeNote } from "./note-categories";
+import type { Note } from "@/types/chapter";
 
 export async function migrateLocalStorageToPocketBase(
   userId: string
@@ -26,6 +28,25 @@ export async function migrateLocalStorageToPocketBase(
       const notes = ls.getChapterNotes(i);
       if (notes) {
         await pbs.pbSaveNotes(userId, i, notes);
+      }
+    }
+
+    // Migrate old single-string notes to notes_v2 format
+    for (let i = 1; i <= 9; i++) {
+      const oldNotes = await pbs.pbGetNotes(userId, i);
+      if (oldNotes) {
+        const lines = oldNotes.split("\n").filter((line: string) => line.trim());
+        for (const line of lines) {
+          const note: Note = {
+            id: ls.generateId(),
+            chapterId: i,
+            text: line.trim(),
+            category: categorizeNote(line.trim()),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          await pbs.pbSaveNoteV2(userId, note);
+        }
       }
     }
 
