@@ -1,0 +1,15 @@
+services:
+  pocketbase:
+    build:
+      context: ./pb
+    ports:
+      - "8090:8090"
+    volumes:
+      - pb_data:/pb/pb_data
+    environment:
+      - PB_EMAIL=${PB_EMAIL}
+      - PB_PASSWORD=${PB_PASSWORD}
+    restart: unless-stopped
+
+volumes:
+  pb_data:
