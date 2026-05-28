@@ -75,17 +75,23 @@ export function VocabularySection({
     <section>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xl font-semibold text-slate-900">Woordenlijst</h2>
-        <button
-          onClick={handleAddAll}
-          disabled={loading || allAdded}
-          className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
-            loading || allAdded
-              ? "bg-slate-100 text-slate-400 cursor-default"
-              : "bg-orange-100 text-orange-700 hover:bg-orange-200"
-          }`}
-        >
-          {loading ? "Loading..." : allAdded ? "All added ✓" : "Add all to Flashcards"}
-        </button>
+        {storage.isAuthenticated ? (
+          <button
+            onClick={handleAddAll}
+            disabled={loading || allAdded}
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              loading || allAdded
+                ? "bg-slate-100 text-slate-400 cursor-default"
+                : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+            }`}
+          >
+            {loading ? "Loading..." : allAdded ? "All added ✓" : "Add all to Flashcards"}
+          </button>
+        ) : (
+          <span className="text-xs px-3 py-1.5 rounded-lg font-medium bg-slate-100 text-slate-400 flex items-center gap-1">
+            🔒 Sign in to add
+          </span>
+        )}
       </div>
       <div className="bg-white rounded-xl border border-slate-200">
         {/* Search bar */}
@@ -142,20 +148,29 @@ export function VocabularySection({
                   >
                     {item.english}
                   </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!isAdded) handleAddWord(item);
-                    }}
-                    className={`text-xs w-6 h-6 rounded-full flex items-center justify-center transition-colors shrink-0 ${
-                      isAdded
-                        ? "bg-green-100 text-green-600"
-                        : "bg-slate-100 text-slate-400 hover:bg-orange-100 hover:text-orange-600"
-                    }`}
-                    title={isAdded ? "Added to flashcards" : "Add to flashcards"}
-                  >
-                    {isAdded ? "✓" : "+"}
-                  </button>
+                  {storage.isAuthenticated ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isAdded) handleAddWord(item);
+                      }}
+                      className={`text-xs w-6 h-6 rounded-full flex items-center justify-center transition-colors shrink-0 ${
+                        isAdded
+                          ? "bg-green-100 text-green-600"
+                          : "bg-slate-100 text-slate-400 hover:bg-orange-100 hover:text-orange-600"
+                      }`}
+                      title={isAdded ? "Added to flashcards" : "Add to flashcards"}
+                    >
+                      {isAdded ? "✓" : "+"}
+                    </button>
+                  ) : (
+                    <span
+                      className="text-xs w-6 h-6 rounded-full flex items-center justify-center bg-slate-100 text-slate-400 shrink-0 cursor-not-allowed"
+                      title="Sign in to add flashcards"
+                    >
+                      🔒
+                    </span>
+                  )}
                 </div>
               </div>
             );
