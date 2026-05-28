@@ -1,0 +1,16 @@
+name: Deploy dutch-app
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Pull latest
+        run: git -C /Users/kanav_personal/projects/auth-workspace pull origin main
+
+      - name: Deploy
+        working-directory: /Users/kanav_personal/projects/auth-workspace/apps/dutch-app
+        run: PATH="$HOME/bin:$PATH" docker compose up -d --build
