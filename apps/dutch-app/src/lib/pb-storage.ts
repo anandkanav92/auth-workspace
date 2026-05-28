@@ -2,11 +2,16 @@ import pb from "./pb";
 import type { FlashCard } from "./srs";
 import type { ChapterProgress, StreakData } from "./storage";
 
+// Sanitize strings for PocketBase filter expressions to prevent injection
+function sanitize(value: string): string {
+  return value.replace(/"/g, '\\"');
+}
+
 // --- Flashcards ---
 
 export async function pbGetFlashcards(userId: string): Promise<FlashCard[]> {
   const records = await pb.collection("flashcards").getFullList({
-    filter: `userId = "${userId}"`,
+    filter: `userId = "${sanitize(userId)}"`,
   });
   return records.map((r) => ({
     id: r["cardId"] as string,
@@ -25,7 +30,7 @@ export async function pbSaveFlashcard(
   card: FlashCard
 ): Promise<void> {
   const existing = await pb.collection("flashcards").getFullList({
-    filter: `userId = "${userId}" && cardId = "${card.id}"`,
+    filter: `userId = "${sanitize(userId)}" && cardId = "${sanitize(card.id)}"`,
   });
   const data = {
     userId,
@@ -52,7 +57,7 @@ export async function pbGetChapterProgress(
   chapterId: number
 ): Promise<ChapterProgress | null> {
   const records = await pb.collection("chapter_progress").getFullList({
-    filter: `userId = "${userId}" && chapterId = ${chapterId}`,
+    filter: `userId = "${sanitize(userId)}" && chapterId = ${chapterId}`,
   });
   if (records.length === 0) return null;
   const r = records[0];
@@ -74,7 +79,7 @@ export async function pbUpdateChapterProgress(
   update: Partial<ChapterProgress>
 ): Promise<void> {
   const records = await pb.collection("chapter_progress").getFullList({
-    filter: `userId = "${userId}" && chapterId = ${chapterId}`,
+    filter: `userId = "${sanitize(userId)}" && chapterId = ${chapterId}`,
   });
   if (records.length > 0) {
     await pb.collection("chapter_progress").update(records[0].id, update);
@@ -98,7 +103,7 @@ export async function pbGetAllProgress(
   userId: string
 ): Promise<Record<number, ChapterProgress>> {
   const records = await pb.collection("chapter_progress").getFullList({
-    filter: `userId = "${userId}"`,
+    filter: `userId = "${sanitize(userId)}"`,
   });
   const result: Record<number, ChapterProgress> = {};
   for (const r of records) {
@@ -123,7 +128,7 @@ export async function pbGetNotes(
   chapterId: number
 ): Promise<string> {
   const records = await pb.collection("notes").getFullList({
-    filter: `userId = "${userId}" && chapterId = ${chapterId}`,
+    filter: `userId = "${sanitize(userId)}" && chapterId = ${chapterId}`,
   });
   return records.length > 0 ? (records[0]["content"] as string) : "";
 }
@@ -134,7 +139,7 @@ export async function pbSaveNotes(
   content: string
 ): Promise<void> {
   const records = await pb.collection("notes").getFullList({
-    filter: `userId = "${userId}" && chapterId = ${chapterId}`,
+    filter: `userId = "${sanitize(userId)}" && chapterId = ${chapterId}`,
   });
   if (records.length > 0) {
     await pb.collection("notes").update(records[0].id, { content });
@@ -147,7 +152,7 @@ export async function pbSaveNotes(
 
 export async function pbGetStreak(userId: string): Promise<StreakData> {
   const records = await pb.collection("streaks").getFullList({
-    filter: `userId = "${userId}"`,
+    filter: `userId = "${sanitize(userId)}"`,
   });
   if (records.length === 0) return { currentStreak: 0, lastStudyDate: "" };
   return {
@@ -172,7 +177,7 @@ export async function pbRecordStudyDay(userId: string): Promise<StreakData> {
   };
 
   const records = await pb.collection("streaks").getFullList({
-    filter: `userId = "${userId}"`,
+    filter: `userId = "${sanitize(userId)}"`,
   });
   if (records.length > 0) {
     await pb.collection("streaks").update(records[0].id, updated);
@@ -180,4 +185,20 @@ export async function pbRecordStudyDay(userId: string): Promise<StreakData> {
     await pb.collection("streaks").create({ userId, ...updated });
   }
   return updated;
+}
+
+// --- Direct streak set (for migration, preserves existing streak count) ---
+
+export async function pbSetStreak(
+  userId: string,
+  streakData: StreakData
+): Promise<void> {
+  const records = await pb.collection("streaks").getFullList({
+    filter: `userId = "${sanitize(userId)}"`,
+  });
+  if (records.length > 0) {
+    await pb.collection("streaks").update(records[0].id, streakData);
+  } else {
+    await pb.collection("streaks").create({ userId, ...streakData });
+  }
 }

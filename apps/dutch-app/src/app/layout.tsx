@@ -33,25 +33,25 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex bg-slate-50 text-slate-900">
-        {/* Desktop sidebar — hidden on mobile */}
-        <div className="hidden lg:block">
-          <Sidebar />
-        </div>
+        <AuthProvider>
+          <MigrationProvider>
+            {/* Desktop sidebar — hidden on mobile */}
+            <div className="hidden lg:block">
+              <Sidebar />
+            </div>
 
-        <main className="flex-1 min-h-screen overflow-y-auto pb-20 lg:pb-0">
-          <TTSWrapper>
-            <AuthProvider>
-              <MigrationProvider>
+            <main className="flex-1 min-h-screen overflow-y-auto pb-20 lg:pb-0">
+              <TTSWrapper>
                 <div className="max-w-4xl mx-auto px-4 py-4 lg:px-8 lg:py-8">
                   {children}
                 </div>
-              </MigrationProvider>
-            </AuthProvider>
-          </TTSWrapper>
-        </main>
+              </TTSWrapper>
+            </main>
 
-        {/* Mobile bottom nav — hidden on desktop */}
-        <MobileNav />
+            {/* Mobile bottom nav — hidden on desktop */}
+            <MobileNav />
+          </MigrationProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import type { Exercise } from "@/types/chapter";
 import { scoreQuiz, shuffleArray } from "@/lib/quiz";
+import { useStorage } from "@/hooks/useStorage";
 import { QuizQuestion } from "./QuizQuestion";
 import Link from "next/link";
 
@@ -17,10 +18,12 @@ export function QuizRunner({
   chapterId,
   chapterTitle,
 }: QuizRunnerProps) {
+  const storage = useStorage();
   const shuffledExercises = useMemo(() => shuffleArray(exercises), [exercises]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [finished, setFinished] = useState(false);
+  const savedRef = useRef(false);
 
   const total = shuffledExercises.length;
   const progress = total > 0 ? Math.round((currentIndex / total) * 100) : 0;
@@ -41,6 +44,23 @@ export function QuizRunner({
     setCorrectCount(0);
     setFinished(false);
   }
+
+  // Save quiz result when finished
+  useEffect(() => {
+    if (!finished || savedRef.current) return;
+    savedRef.current = true;
+
+    const result = scoreQuiz(correctCount, total);
+    async function saveResult() {
+      const existing = await storage.getChapterProgress(chapterId);
+      const bestScore = Math.max(existing.quizBestScore ?? 0, result.percentage);
+      await storage.updateChapterProgress(chapterId, {
+        exercisesDone: true,
+        quizBestScore: bestScore,
+      });
+    }
+    saveResult();
+  }, [finished, correctCount, total, chapterId, storage]);
 
   if (finished) {
     const result = scoreQuiz(correctCount, total);

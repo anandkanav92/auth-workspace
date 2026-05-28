@@ -29,10 +29,10 @@ export async function migrateLocalStorageToPocketBase(
       }
     }
 
-    // Migrate streak
+    // Migrate streak — preserve exact count, don't recalculate
     const streak = ls.getStreak();
     if (streak.currentStreak > 0) {
-      await pbs.pbRecordStudyDay(userId);
+      await pbs.pbSetStreak(userId, streak);
     }
 
     localStorage.setItem(flagKey, "true");
