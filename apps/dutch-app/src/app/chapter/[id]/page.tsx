@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getChapter, getAllChapterIds } from "@/data/chapters";
 import { ChapterContent } from "@/components/chapter/ChapterContent";
-import Link from "next/link";
+import { QuizButton } from "@/components/chapter/QuizButton";
 
 export function generateStaticParams() {
   return getAllChapterIds().map((id) => ({ id: String(id) }));
@@ -29,12 +29,7 @@ export default async function ChapterPage({
           </h1>
           <p className="text-slate-500 text-sm mt-0.5">{chapter.theme}</p>
         </div>
-        <Link
-          href={`/chapter/${chapter.id}/quiz`}
-          className="inline-block bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 text-sm font-medium shrink-0 shadow-sm"
-        >
-          Quiz →
-        </Link>
+        <QuizButton chapterId={chapter.id} />
       </div>
 
       {/* Tabbed content */}

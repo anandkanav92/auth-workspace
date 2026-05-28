@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getChapter, getAllChapterIds } from "@/data/chapters";
-import { QuizRunner } from "@/components/quiz/QuizRunner";
+import { QuizGate } from "@/components/quiz/QuizGate";
 import Link from "next/link";
 
 export function generateStaticParams() {
@@ -47,7 +47,7 @@ export default async function QuizPage({
         </p>
       </div>
 
-      <QuizRunner
+      <QuizGate
         exercises={chapter.exercises}
         chapterId={chapter.id}
         chapterTitle={chapter.title}
