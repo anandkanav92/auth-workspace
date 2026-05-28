@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { chapters } from "@/data/chapters";
+import { useAuth, SignInButton, SignOutButton, UserAvatar } from "@myorg/auth-google";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "📊" },
@@ -11,6 +12,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user, loading } = useAuth();
 
   return (
     <aside className="w-64 bg-slate-800 text-white h-screen sticky top-0 p-4 flex flex-col shrink-0 overflow-y-auto">
@@ -55,6 +57,19 @@ export function Sidebar() {
           </Link>
         ))}
       </nav>
+
+      <div className="mt-auto pt-4 border-t border-slate-700">
+        {loading ? (
+          <div className="px-3 py-2 text-sm text-slate-400">Loading...</div>
+        ) : user ? (
+          <div className="space-y-2">
+            <UserAvatar className="px-3 py-1 text-sm text-slate-200" />
+            <SignOutButton className="w-full px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded-lg text-left transition-colors" />
+          </div>
+        ) : (
+          <SignInButton className="w-full px-3 py-2 text-sm text-orange-400 hover:bg-slate-700 rounded-lg text-left transition-colors" />
+        )}
+      </div>
     </aside>
   );
 }

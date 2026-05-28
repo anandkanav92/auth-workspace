@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { TTSWrapper } from "@/components/audio/TTSWrapper";
+import { AuthProvider } from "@/lib/auth-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -38,9 +39,11 @@ export default function RootLayout({
 
         <main className="flex-1 min-h-screen overflow-y-auto pb-20 lg:pb-0">
           <TTSWrapper>
-            <div className="max-w-4xl mx-auto px-4 py-4 lg:px-8 lg:py-8">
-              {children}
-            </div>
+            <AuthProvider>
+              <div className="max-w-4xl mx-auto px-4 py-4 lg:px-8 lg:py-8">
+                {children}
+              </div>
+            </AuthProvider>
           </TTSWrapper>
         </main>
 
