@@ -4,7 +4,7 @@ import type { VocabularyItem } from "@/types/chapter";
 import { useState, useEffect } from "react";
 import { PlayButton } from "@/components/audio/PlayButton";
 import { createFlashCard } from "@/lib/srs";
-import { addFlashcard, getFlashcards } from "@/lib/storage";
+import { useStorage } from "@/hooks/useStorage";
 
 interface VocabularySectionProps {
   vocabulary: VocabularyItem[];
@@ -15,23 +15,31 @@ export function VocabularySection({
   vocabulary,
   chapterId,
 }: VocabularySectionProps) {
+  const storage = useStorage();
   const [revealedWords, setRevealedWords] = useState<Set<number>>(new Set());
   const [addedWords, setAddedWords] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const existing = getFlashcards();
-    setAddedWords(new Set(existing.map((c) => c.id)));
-  }, []);
+    async function loadFlashcards() {
+      const existing = await storage.getFlashcards();
+      setAddedWords(new Set(existing.map((c) => c.id)));
+      setLoading(false);
+    }
+    loadFlashcards();
+  }, [storage.getFlashcards]);
 
-  const handleAddWord = (item: VocabularyItem) => {
+  const handleAddWord = async (item: VocabularyItem) => {
     const card = createFlashCard(item.dutch, item.english, chapterId);
-    addFlashcard(card);
+    await storage.saveFlashcard(card);
     setAddedWords((prev) => new Set(prev).add(card.id));
   };
 
-  const handleAddAll = () => {
-    vocabulary.forEach((item) => handleAddWord(item));
+  const handleAddAll = async () => {
+    for (const item of vocabulary) {
+      await handleAddWord(item);
+    }
   };
 
   const allAdded = vocabulary.every((item) => {
@@ -69,14 +77,14 @@ export function VocabularySection({
         <h2 className="text-xl font-semibold text-slate-900">Woordenlijst</h2>
         <button
           onClick={handleAddAll}
-          disabled={allAdded}
+          disabled={loading || allAdded}
           className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
-            allAdded
+            loading || allAdded
               ? "bg-slate-100 text-slate-400 cursor-default"
               : "bg-orange-100 text-orange-700 hover:bg-orange-200"
           }`}
         >
-          {allAdded ? "All added ✓" : "Add all to Flashcards"}
+          {loading ? "Loading..." : allAdded ? "All added ✓" : "Add all to Flashcards"}
         </button>
       </div>
       <div className="bg-white rounded-xl border border-slate-200">

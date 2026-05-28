@@ -3,18 +3,22 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { chapters } from "@/data/chapters";
-import { getChapterProgress, type ChapterProgress } from "@/lib/storage";
+import { useStorage } from "@/hooks/useStorage";
+import type { ChapterProgress } from "@/lib/storage";
 
 export function ChapterGrid() {
+  const storage = useStorage();
   const [progress, setProgress] = useState<Record<number, ChapterProgress>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const p: Record<number, ChapterProgress> = {};
-    chapters.forEach((ch) => {
-      p[ch.id] = getChapterProgress(ch.id);
-    });
-    setProgress(p);
-  }, []);
+    async function loadProgress() {
+      const all = await storage.getAllProgress();
+      setProgress(all);
+      setLoading(false);
+    }
+    loadProgress();
+  }, [storage.getAllProgress]);
 
   const getCompletionPercent = (cp: ChapterProgress | undefined): number => {
     if (!cp) return 0;
@@ -28,6 +32,20 @@ export function ChapterGrid() {
     ];
     return Math.round((fields.filter(Boolean).length / fields.length) * 100);
   };
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-3 gap-4">
+        {chapters.map((ch) => (
+          <div key={ch.id} className="bg-white rounded-xl border p-5 animate-pulse">
+            <div className="h-5 w-24 bg-slate-100 rounded mb-2" />
+            <div className="h-3 w-32 bg-slate-100 rounded mb-3" />
+            <div className="h-2 bg-slate-100 rounded-full" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-3 gap-4">

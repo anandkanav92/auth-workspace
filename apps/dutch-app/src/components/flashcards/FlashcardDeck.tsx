@@ -3,29 +3,43 @@
 import { useState, useEffect } from "react";
 import { FlashcardCard } from "./FlashcardCard";
 import { getDueCards, calculateNextReview, Rating } from "@/lib/srs";
-import { getFlashcards, updateFlashcard } from "@/lib/storage";
+import { useStorage } from "@/hooks/useStorage";
 import type { FlashCard } from "@/lib/srs";
 import Link from "next/link";
 
 export function FlashcardDeck() {
+  const storage = useStorage();
   const [dueCards, setDueCards] = useState<FlashCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [sessionStats, setSessionStats] = useState({ reviewed: 0, total: 0 });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const all = getFlashcards();
-    const due = getDueCards(all);
-    setDueCards(due);
-    setSessionStats({ reviewed: 0, total: due.length });
-  }, []);
+    async function loadDueCards() {
+      const all = await storage.getFlashcards();
+      const due = getDueCards(all);
+      setDueCards(due);
+      setSessionStats({ reviewed: 0, total: due.length });
+      setLoading(false);
+    }
+    loadDueCards();
+  }, [storage.getFlashcards]);
 
-  const handleRate = (rating: Rating) => {
+  const handleRate = async (rating: Rating) => {
     const card = dueCards[currentIndex];
     const updated = calculateNextReview(card, rating);
-    updateFlashcard(updated);
+    await storage.updateFlashcard(updated);
     setSessionStats((s) => ({ ...s, reviewed: s.reviewed + 1 }));
     setCurrentIndex((i) => i + 1);
   };
+
+  if (loading) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-500">Loading flashcards...</p>
+      </div>
+    );
+  }
 
   if (dueCards.length === 0) {
     return (

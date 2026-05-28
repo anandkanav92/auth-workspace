@@ -1,23 +1,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getFlashcards } from "@/lib/storage";
+import { useStorage } from "@/hooks/useStorage";
 import { getDueCards } from "@/lib/srs";
-import { getStreak } from "@/lib/storage";
 
 export function StatsBar() {
+  const storage = useStorage();
   const [stats, setStats] = useState({ dueCards: 0, streak: 0, totalCards: 0 });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const cards = getFlashcards();
-    const due = getDueCards(cards);
-    const streak = getStreak();
-    setStats({
-      dueCards: due.length,
-      streak: streak.currentStreak,
-      totalCards: cards.length,
-    });
-  }, []);
+    async function loadStats() {
+      const [cards, streak] = await Promise.all([
+        storage.getFlashcards(),
+        storage.getStreak(),
+      ]);
+      const due = getDueCards(cards);
+      setStats({
+        dueCards: due.length,
+        streak: streak.currentStreak,
+        totalCards: cards.length,
+      });
+      setLoading(false);
+    }
+    loadStats();
+  }, [storage.getFlashcards, storage.getStreak]);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="bg-white rounded-xl border p-4 text-center animate-pulse">
+            <div className="h-8 w-8 bg-slate-100 rounded mx-auto mb-1" />
+            <div className="h-8 w-12 bg-slate-100 rounded mx-auto" />
+            <div className="h-4 w-16 bg-slate-100 rounded mx-auto mt-1" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   const items = [
     { label: "Cards Due", value: stats.dueCards, icon: "🃏", color: "text-orange-600" },
