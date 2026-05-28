@@ -1,4 +1,20 @@
 services:
+  dutch-app:
+    build:
+      context: ../..
+      dockerfile: apps/dutch-app/Dockerfile
+      args:
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+        NEXT_PUBLIC_PB_URL: ${NEXT_PUBLIC_PB_URL:-http://pocketbase:8090}
+    ports:
+      - "3002:3000"
+    depends_on:
+      - pocketbase
+    restart: unless-stopped
+
   pocketbase:
     build:
       context: ./pb
