@@ -8,9 +8,9 @@ services:
         NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
         NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
         NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
-        NEXT_PUBLIC_PB_URL: ${NEXT_PUBLIC_PB_URL:-http://pocketbase:8090}
+        NEXT_PUBLIC_PB_URL: ${NEXT_PUBLIC_PB_URL}
     ports:
-      - "3002:3000"
+      - "3102:3000"
     depends_on:
       - pocketbase
     restart: unless-stopped
@@ -19,10 +19,7 @@ services:
     build:
       context: ./pb
     ports:
-      # Bind to localhost only — PocketBase API rules are open (Firebase auth,
-      # not PB auth), so it must not be exposed to the public network.
-      # In production, use the docker network (dutch-app → pocketbase:8090).
-      - "127.0.0.1:8090:8090"
+      - "8091:8090"
     volumes:
       - pb_data:/pb/pb_data
     environment:
