@@ -6,6 +6,7 @@ import * as ls from "@/lib/storage";
 import * as pbs from "@/lib/pb-storage";
 import type { FlashCard } from "@/lib/srs";
 import type { ChapterProgress, StreakData } from "@/lib/storage";
+import type { Note, NoteCategory } from "@/types/chapter";
 
 export function useStorage() {
   const { user } = useAuth();
@@ -89,6 +90,48 @@ export function useStorage() {
     [uid]
   );
 
+  // --- Notes V2 ---
+  const getNotes = useCallback(
+    async (chapterId: number): Promise<Note[]> => {
+      if (uid) return pbs.pbGetNotesV2(uid, chapterId);
+      return ls.getNotesV2(chapterId);
+    },
+    [uid]
+  );
+
+  const saveNote = useCallback(
+    async (note: Note): Promise<void> => {
+      if (uid) {
+        const pbId = await pbs.pbSaveNoteV2(uid, note);
+        // Update localStorage cache with PB ID
+        ls.saveNoteV2({ ...note, id: pbId });
+      } else {
+        ls.saveNoteV2(note);
+      }
+    },
+    [uid]
+  );
+
+  const updateNote = useCallback(
+    async (id: string, text: string, category: NoteCategory): Promise<void> => {
+      if (uid) {
+        await pbs.pbUpdateNoteV2(id, text, category);
+      }
+      ls.updateNoteV2(id, text, category);
+    },
+    [uid]
+  );
+
+  const deleteNote = useCallback(
+    async (id: string): Promise<void> => {
+      if (uid) {
+        await pbs.pbDeleteNoteV2(id);
+      }
+      ls.deleteNoteV2(id);
+    },
+    [uid]
+  );
+
   // --- Streaks ---
   const getStreak = useCallback(async (): Promise<StreakData> => {
     if (uid) return pbs.pbGetStreak(uid);
@@ -110,6 +153,10 @@ export function useStorage() {
     getAllProgress,
     getChapterNotes,
     saveChapterNotes,
+    getNotes,
+    saveNote,
+    updateNote,
+    deleteNote,
     getStreak,
     recordStudyDay,
   };

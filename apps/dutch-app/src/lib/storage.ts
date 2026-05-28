@@ -1,4 +1,5 @@
 import type { FlashCard } from "./srs";
+import type { Note, NoteCategory } from "@/types/chapter";
 
 const KEYS = {
   flashcards: "dutch-app-flashcards",
@@ -88,6 +89,55 @@ export function saveChapterNotes(chapterId: number, notes: string): void {
   const all = getItem<Record<number, string>>(KEYS.notes, {});
   all[chapterId] = notes;
   setItem(KEYS.notes, all);
+}
+
+// --- Notes V2 (individual note objects) ---
+
+export function generateId(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export function getNotesV2(chapterId: number): Note[] {
+  const all = getItem<Note[]>("dutch-app-notes-v2", []);
+  return all
+    .filter((n) => n.chapterId === chapterId)
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+}
+
+export function getAllNotesV2(): Note[] {
+  return getItem<Note[]>("dutch-app-notes-v2", []);
+}
+
+export function saveNoteV2(note: Note): void {
+  const all = getItem<Note[]>("dutch-app-notes-v2", []);
+  all.push(note);
+  setItem("dutch-app-notes-v2", all);
+}
+
+export function updateNoteV2(
+  id: string,
+  text: string,
+  category: NoteCategory
+): void {
+  const all = getItem<Note[]>("dutch-app-notes-v2", []);
+  const idx = all.findIndex((n) => n.id === id);
+  if (idx !== -1) {
+    all[idx] = { ...all[idx], text, category, updatedAt: new Date().toISOString() };
+    setItem("dutch-app-notes-v2", all);
+  }
+}
+
+export function deleteNoteV2(id: string): void {
+  const all = getItem<Note[]>("dutch-app-notes-v2", []);
+  setItem(
+    "dutch-app-notes-v2",
+    all.filter((n) => n.id !== id)
+  );
 }
 
 export interface StreakData {

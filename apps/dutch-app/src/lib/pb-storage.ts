@@ -1,6 +1,7 @@
 import pb from "./pb";
 import type { FlashCard } from "./srs";
 import type { ChapterProgress, StreakData } from "./storage";
+import type { Note, NoteCategory } from "@/types/chapter";
 
 // Sanitize strings for PocketBase filter expressions to prevent injection
 function sanitize(value: string): string {
@@ -146,6 +147,51 @@ export async function pbSaveNotes(
   } else {
     await pb.collection("notes").create({ userId, chapterId, content });
   }
+}
+
+// --- Notes V2 (individual note objects) ---
+
+export async function pbGetNotesV2(
+  userId: string,
+  chapterId: number
+): Promise<Note[]> {
+  const records = await pb.collection("notes_v2").getFullList({
+    filter: `userId = "${sanitize(userId)}" && chapterId = ${chapterId}`,
+    sort: "-created",
+  });
+  return records.map((r) => ({
+    id: r.id,
+    chapterId: r["chapterId"] as number,
+    text: r["text"] as string,
+    category: r["category"] as NoteCategory,
+    createdAt: r["created"] as string,
+    updatedAt: r["updated"] as string,
+  }));
+}
+
+export async function pbSaveNoteV2(
+  userId: string,
+  note: Note
+): Promise<string> {
+  const record = await pb.collection("notes_v2").create({
+    userId,
+    chapterId: note.chapterId,
+    text: note.text,
+    category: note.category,
+  });
+  return record.id; // Return PB-generated ID
+}
+
+export async function pbUpdateNoteV2(
+  noteId: string,
+  text: string,
+  category: NoteCategory
+): Promise<void> {
+  await pb.collection("notes_v2").update(noteId, { text, category });
+}
+
+export async function pbDeleteNoteV2(noteId: string): Promise<void> {
+  await pb.collection("notes_v2").delete(noteId);
 }
 
 // --- Streaks ---

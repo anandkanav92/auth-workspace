@@ -83,3 +83,14 @@ export interface Chapter {
   pronunciation: Pronunciation;
   culture: CultureNote;
 }
+
+export type NoteCategory = "vocab" | "grammar" | "general";
+
+export interface Note {
+  id: string;
+  chapterId: number;
+  text: string;
+  category: NoteCategory;
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
