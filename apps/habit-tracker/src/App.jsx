@@ -10,11 +10,13 @@ import StreakDots from "./components/StreakDots";
 import LoginPage from "./components/LoginPage";
 import CompletionNotes from "./components/CompletionNotes";
 import ProgressPage from "./components/ProgressPage";
+import WeeklyView from "./components/WeeklyView";
 import {
   getDateForOffset,
   getJsDayToOurDay,
   toDateStr,
   formatDateHeader,
+  formatTime,
   getLast5Occurrences,
 } from "./data/constants";
 
@@ -64,6 +66,7 @@ function AuthenticatedApp({ user }) {
   const analytics = useAnalytics(habits, completions, categories, vacationMode, vacationStart);
 
   const [dayOffset, setDayOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [selectedHabit, setSelectedHabit] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
@@ -125,8 +128,8 @@ function AuthenticatedApp({ user }) {
   function handleTouchEnd(e) {
     if (!touchRef.current.swiping) return;
     const dx = e.changedTouches[0].clientX - touchRef.current.startX;
-    if (dx < -60 && pageIndex === 0) setPageIndex(1);
-    if (dx > 60 && pageIndex === 1) setPageIndex(0);
+    if (dx < -60 && pageIndex < 2) setPageIndex(p => p + 1);
+    if (dx > 60 && pageIndex > 0) setPageIndex(p => p - 1);
     touchRef.current.swiping = false;
   }
 
@@ -182,7 +185,14 @@ function AuthenticatedApp({ user }) {
   const viewDate = getDateForOffset(dayOffset);
   const dateStr = toDateStr(viewDate);
   const ourDay = getJsDayToOurDay(viewDate.getDay());
-  const todaysHabits = habits.filter((h) => h.days.includes(ourDay));
+  const todaysHabits = habits
+    .filter((h) => h.days.includes(ourDay))
+    .sort((a, b) => {
+      if (!a.time && !b.time) return 0;
+      if (!a.time) return -1;
+      if (!b.time) return 1;
+      return a.time.localeCompare(b.time);
+    });
 
   // Group habits by categoryId
   const groupedByCategory = {};
@@ -235,15 +245,15 @@ function AuthenticatedApp({ user }) {
       {/* Horizontal swipe container */}
       <div style={{
         display: "flex",
-        width: "200%",
-        transform: `translateX(-${pageIndex * 50}%)`,
+        width: "300%",
+        transform: `translateX(-${pageIndex * (100/3)}%)`,
         transition: "transform 0.3s ease",
         minHeight: "100vh",
       }}>
-        {/* Page 0: Daily View */}
-        <div style={{ width: "50%", minHeight: "100vh", padding: "20px 16px 90px", overflowY: "auto" }}>
+        {/* Page 0: Weekly View */}
+        <div style={{ width: `${100/3}%`, minHeight: "100vh", padding: "20px 16px 90px", overflowY: "auto" }}>
           <div style={{ maxWidth: 900, margin: "0 auto" }}>
-            {/* User bar */}
+            {/* User bar (shared) */}
             <div style={{
               display: "flex",
               alignItems: "center",
@@ -334,6 +344,23 @@ function AuthenticatedApp({ user }) {
               </div>
             )}
 
+            {/* Weekly calendar */}
+            <WeeklyView
+              weekOffset={weekOffset}
+              setWeekOffset={setWeekOffset}
+              habits={habits}
+              completions={completions}
+              toggleCompletion={toggleCompletion}
+              getCategory={getCategory}
+              onHabitClick={(habit) => setSelectedHabit(habit)}
+              vacationMode={vacationMode}
+            />
+          </div>
+        </div>
+
+        {/* Page 1: Today (Daily View) */}
+        <div style={{ width: `${100/3}%`, minHeight: "100vh", padding: "20px 16px 90px", overflowY: "auto" }}>
+          <div style={{ maxWidth: 900, margin: "0 auto" }}>
             {/* Date Header */}
             <div
               style={{
@@ -579,6 +606,16 @@ function AuthenticatedApp({ user }) {
                               >
                                 {habit.icon} {habit.name}
                               </div>
+                              {habit.time && (
+                                <div style={{
+                                  fontSize: 11,
+                                  color: "#999",
+                                  fontFamily: "'Space Mono', monospace",
+                                  marginTop: 1,
+                                }}>
+                                  {formatTime(habit.time)}
+                                </div>
+                              )}
                             </div>
 
                             {/* Streak dots */}
@@ -637,14 +674,14 @@ function AuthenticatedApp({ user }) {
           </div>
         </div>
 
-        {/* Page 1: Progress */}
-        <div style={{ width: "50%", minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
+        {/* Page 2: Progress */}
+        <div style={{ width: `${100/3}%`, minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
           <ProgressPage analytics={analytics} onHabitTap={handleLeaderboardTap} onBack={() => setPageIndex(0)} />
         </div>
       </div>
 
-      {/* FAB — only on daily view */}
-      {pageIndex === 0 && (
+      {/* FAB — visible on Weekly and Today views */}
+      {pageIndex !== 2 && (
         <button
           onClick={() => setShowCreateForm(true)}
           style={{
@@ -681,8 +718,9 @@ function AuthenticatedApp({ user }) {
         padding: "8px 0 env(safe-area-inset-bottom, 8px)",
       }}>
         {[
-          { idx: 0, label: "Today", icon: "📋" },
-          { idx: 1, label: "Progress", icon: "📊" },
+          { idx: 0, label: "Week", icon: "📅" },
+          { idx: 1, label: "Today", icon: "📋" },
+          { idx: 2, label: "Progress", icon: "📊" },
         ].map(tab => (
           <button
             key={tab.idx}

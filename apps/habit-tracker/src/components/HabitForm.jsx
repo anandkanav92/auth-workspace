@@ -10,6 +10,7 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
   const [categoryId, setCategoryId] = useState(isEdit ? habit.categoryId : (categories[0]?.id || ""));
   const [days, setDays] = useState(isEdit ? [...habit.days] : [0, 1, 2, 3, 4, 5, 6]);
   const [notes, setNotes] = useState(isEdit ? (habit.notes || "") : "");
+  const [time, setTime] = useState(isEdit ? (habit.time || "") : "");
   const [showNotes, setShowNotes] = useState(isEdit && !!habit.notes);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -58,6 +59,7 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
       categoryId,
       days,
       notes: notes.trim(),
+      time: time || null,
     });
   }
 
@@ -455,6 +457,69 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Time picker */}
+          <div style={{ marginBottom: 16 }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#999",
+                fontFamily: "'Space Mono', monospace",
+                letterSpacing: "1px",
+                marginBottom: 8,
+              }}
+            >
+              TIME
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: 14,
+                  fontFamily: "'DM Sans', sans-serif",
+                  border: "1px solid #e8e8f0",
+                  borderRadius: 12,
+                  outline: "none",
+                  background: "#fafafe",
+                  color: time ? "#1a1a2e" : "#999",
+                  width: 140,
+                }}
+                onFocus={(e) => (e.target.style.borderColor = "#3B82F6")}
+                onBlur={(e) => (e.target.style.borderColor = "#e8e8f0")}
+              />
+              {time && (
+                <button
+                  onClick={() => setTime("")}
+                  style={{
+                    background: "#f5f5fa",
+                    border: "1px solid #e8e8f0",
+                    borderRadius: 8,
+                    padding: "6px 12px",
+                    fontSize: 12,
+                    color: "#999",
+                    cursor: "pointer",
+                    fontFamily: "'Space Mono', monospace",
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+              {!time && (
+                <span style={{
+                  fontSize: 12,
+                  color: "#bbb",
+                  fontFamily: "'Space Mono', monospace",
+                }}>
+                  All day
+                </span>
+              )}
             </div>
           </div>
 

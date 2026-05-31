@@ -53,7 +53,8 @@ create_if_missing "habits" '{
     {"type":"text","name":"icon"},
     {"type":"text","name":"categoryId"},
     {"type":"json","name":"days"},
-    {"type":"text","name":"notes","max":10000}
+    {"type":"text","name":"notes","max":10000},
+    {"type":"text","name":"time"}
   ]
 }'
 

@@ -113,3 +113,41 @@ export function getLast5Occurrences(habit, completions, viewDate) {
 
   return results;
 }
+
+/** Returns the Monday of the week containing the given date */
+export function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Returns array of 7 Date objects [Mon..Sun] for the week containing the given date */
+export function getWeekDates(date) {
+  const monday = getWeekStart(date);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+/** Parse "HH:MM" into hour number (e.g. "09:30" -> 9) */
+export function getHourFromTime(timeStr) {
+  if (!timeStr) return null;
+  return parseInt(timeStr.split(":")[0], 10);
+}
+
+/** Format "HH:MM" for display (e.g. "09:30" -> "9:30") */
+export function formatTime(timeStr) {
+  if (!timeStr) return "All day";
+  const [h, m] = timeStr.split(":");
+  return `${parseInt(h, 10)}:${m}`;
+}
+
+/** Generate hour labels from startHour to endHour */
+export function getHourLabels(startHour = 6, endHour = 22) {
+  return Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
+}

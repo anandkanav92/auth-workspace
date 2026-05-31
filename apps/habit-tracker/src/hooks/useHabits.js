@@ -18,6 +18,7 @@ function recordToHabit(r) {
     categoryId: r.categoryId || "",
     days: Array.isArray(r.days) ? r.days : (r.days ? JSON.parse(r.days) : []),
     notes: r.notes || "",
+    time: r.time || null,
     createdAt: r.created,
   };
 }
@@ -218,6 +219,7 @@ export function useHabits(userId) {
       categoryId: habit.categoryId || "",
       days: habit.days || [],
       notes: habit.notes || "",
+      time: habit.time || "",
     });
   }, [userId]);
 
