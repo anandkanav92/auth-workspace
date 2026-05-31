@@ -4,7 +4,7 @@ import { THEME } from "../data/constants";
 const STATUS_COLOR = {
   done: "#10B981",    // green — success
   missed: "#E8453C",  // red — missed
-  frozen: "#93c5fd",  // frost blue — streak freeze (paired with a ❄️ below)
+  // frozen days render a ❄️ glyph instead of a colored dot
 };
 
 export default function StreakDots({ occurrences, size = "small", onToggle }) {
@@ -28,6 +28,8 @@ export default function StreakDots({ occurrences, size = "small", onToggle }) {
           const hasNotes = occ.notes || occ.effort !== null;
           return (
             <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              {/* Frozen days render the ❄️ in place of the dot, so every
+                  column keeps the same height (no extra row to shift things). */}
               <div
                 onClick={isLarge ? () => {
                   if (hasNotes) setExpandedIdx(expandedIdx === i ? null : i);
@@ -35,23 +37,25 @@ export default function StreakDots({ occurrences, size = "small", onToggle }) {
                 } : undefined}
                 style={{
                   width: dotSize, height: dotSize, borderRadius: "50%",
-                  background: STATUS_COLOR[occ.status] ?? STATUS_COLOR.missed,
+                  background: occ.status === "frozen"
+                    ? "transparent"
+                    : (STATUS_COLOR[occ.status] ?? STATUS_COLOR.missed),
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: isLarge ? 14 : 9, lineHeight: 1,
                   cursor: isLarge ? "pointer" : "default",
                   transition: "background 0.2s ease",
                 }}
-              />
-              {/* Freeze marker */}
-              {isLarge && occ.status === "frozen" && (
-                <div style={{ fontSize: 10, marginTop: -1 }}>❄️</div>
+              >
+                {occ.status === "frozen" ? "❄️" : null}
+              </div>
+              {/* Note indicator — fixed-height slot so all columns align */}
+              {isLarge && (
+                hasNotes ? (
+                  <div style={{ width: 10, height: 2, borderRadius: 1, background: THEME.textMuted }} />
+                ) : (
+                  <div style={{ height: 2 }} />
+                )
               )}
-              {/* Note indicator — neutral underline (blue is reserved for freeze) */}
-              {isLarge && hasNotes && occ.status !== "frozen" && (
-                <div style={{
-                  width: 10, height: 2, borderRadius: 1,
-                  background: THEME.textMuted, marginTop: 0,
-                }} />
-              )}
-              {isLarge && !hasNotes && occ.status !== "frozen" && <div style={{ height: 2 }} />}
               {isLarge && (
                 <span style={{ fontSize: 9, color: THEME.textFaint, fontFamily: THEME.mono, whiteSpace: "nowrap" }}>
                   {formatShortDate(occ.date)}
