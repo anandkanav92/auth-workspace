@@ -74,7 +74,7 @@ function AuthenticatedApp({ user }) {
   const [completionNotesDateStr, setCompletionNotesDateStr] = useState(null);
   const [showVacationConfirm, setShowVacationConfirm] = useState(false);
 
-  // Swipe navigation: 0 = daily view, 1 = progress page
+  // Swipe navigation: 0 = Weekly, 1 = Today (daily), 2 = Progress
   const [pageIndex, setPageIndex] = useState(0);
   const touchRef = useRef({ startX: 0, startY: 0, swiping: false });
 
@@ -137,7 +137,7 @@ function AuthenticatedApp({ user }) {
     const habit = habits.find(h => h.id === habitId);
     if (habit) {
       setSelectedHabit(habit);
-      setPageIndex(0);
+      setPageIndex(1); // Navigate to Today view where habit detail is most contextual
     }
   }
 
@@ -676,7 +676,7 @@ function AuthenticatedApp({ user }) {
 
         {/* Page 2: Progress */}
         <div style={{ width: `${100/3}%`, minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
-          <ProgressPage analytics={analytics} onHabitTap={handleLeaderboardTap} onBack={() => setPageIndex(0)} />
+          <ProgressPage analytics={analytics} onHabitTap={handleLeaderboardTap} onBack={() => setPageIndex(1)} />
         </div>
       </div>
 

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   getWeekDates,
   getHourFromTime,
@@ -26,8 +25,17 @@ export default function WeeklyView({
   const todayStr = toDateStr(today);
 
   // Split habits into all-day and timed
-  const allDayHabits = habits.filter((h) => !h.time);
-  const timedHabits = habits.filter((h) => h.time);
+  // Timed habits outside the 06-22 range fall back to the all-day row
+  const allDayHabits = habits.filter((h) => {
+    if (!h.time) return true;
+    const hour = getHourFromTime(h.time);
+    return hour < 6 || hour > 22;
+  });
+  const timedHabits = habits.filter((h) => {
+    if (!h.time) return false;
+    const hour = getHourFromTime(h.time);
+    return hour >= 6 && hour <= 22;
+  });
 
   // Group timed habits by hour
   const habitsByHour = {};
@@ -43,8 +51,6 @@ export default function WeeklyView({
       weekDates.some((d) => h.days.includes(getJsDayToOurDay(d.getDay())))
     );
   });
-
-  const colWidth = "calc((100% - 48px) / 7)";
 
   return (
     <div>

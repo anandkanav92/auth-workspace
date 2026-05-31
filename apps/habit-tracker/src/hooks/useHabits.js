@@ -62,6 +62,7 @@ async function migrateFromLocalStorage(userId) {
       categoryId: catIdMap[h.categoryId] || h.categoryId || "",
       days: h.days || [],
       notes: h.notes || "",
+      time: h.time || "",
     });
     habitIdMap[h.id] = r.id;
   }
