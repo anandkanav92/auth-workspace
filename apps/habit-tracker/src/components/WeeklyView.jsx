@@ -12,7 +12,7 @@ const HOURS = getHourLabels(6, 22);
 // Layout constants — the gutter is sticky-left, each day column has a fixed
 // min width so 7 columns overflow on narrow screens instead of cutting off.
 const GUTTER_WIDTH = 52;
-const DAY_MIN_WIDTH = 164;
+const DAY_MIN_WIDTH = 190;
 
 export default function WeeklyView({
   weekOffset,
@@ -188,9 +188,8 @@ export default function WeeklyView({
                 <div
                   key={i}
                   style={{
-                    minWidth: DAY_MIN_WIDTH,
-                    flex: "1 0 auto",
-                    flexShrink: 0,
+                    flex: `1 0 ${DAY_MIN_WIDTH}px`,
+                    minWidth: 0,
                     textAlign: "center",
                     padding: "11px 4px",
                     borderRight: i < 6 ? `1px solid ${THEME.border}` : "none",
@@ -272,9 +271,8 @@ export default function WeeklyView({
                   <div
                     key={dayIdx}
                     style={{
-                      minWidth: DAY_MIN_WIDTH,
-                      flex: "1 0 auto",
-                      flexShrink: 0,
+                      flex: `1 0 ${DAY_MIN_WIDTH}px`,
+                      minWidth: 0,
                       borderRight:
                         dayIdx < 6 ? `1px solid ${THEME.border}` : "none",
                       padding: "6px 5px",
@@ -352,9 +350,8 @@ export default function WeeklyView({
                   <div
                     key={dayIdx}
                     style={{
-                      minWidth: DAY_MIN_WIDTH,
-                      flex: "1 0 auto",
-                      flexShrink: 0,
+                      flex: `1 0 ${DAY_MIN_WIDTH}px`,
+                      minWidth: 0,
                       borderRight:
                         dayIdx < 6 ? `1px solid ${THEME.border}` : "none",
                       padding: "6px 5px",
@@ -448,6 +445,7 @@ function HabitChip({
         fontSize: 13,
         lineHeight: 1.25,
         minHeight: 34,
+        minWidth: 0,
       }}
     >
       {/* Checkbox — completion fills with coral */}
@@ -476,13 +474,14 @@ function HabitChip({
       </div>
       <span
         style={{
+          flex: 1,
+          minWidth: 0,
           fontWeight: 500,
           color: isDone ? THEME.textMuted : THEME.text,
           textDecoration: isDone ? "line-through" : "none",
           opacity: isDone ? 0.7 : 1,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          whiteSpace: "normal",
+          wordBreak: "break-word",
           fontFamily: THEME.sans,
         }}
       >
