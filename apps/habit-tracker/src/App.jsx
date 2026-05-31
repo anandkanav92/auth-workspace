@@ -11,6 +11,7 @@ import LoginPage from "./components/LoginPage";
 import CompletionNotes from "./components/CompletionNotes";
 import ProgressPage from "./components/ProgressPage";
 import WeeklyView from "./components/WeeklyView";
+import StreaksGuide from "./components/StreaksGuide";
 import {
   getDateForOffset,
   getJsDayToOurDay,
@@ -132,7 +133,7 @@ function AuthenticatedApp({ user }) {
   function handleTouchEnd(e) {
     if (!touchRef.current.swiping) return;
     const dx = e.changedTouches[0].clientX - touchRef.current.startX;
-    if (dx < -60 && pageIndex < 1) setPageIndex(p => p + 1);
+    if (dx < -60 && pageIndex < 2) setPageIndex(p => p + 1);
     if (dx > 60 && pageIndex > 0) setPageIndex(p => p - 1);
     touchRef.current.swiping = false;
   }
@@ -250,13 +251,13 @@ function AuthenticatedApp({ user }) {
       {/* Horizontal swipe container */}
       <div style={{
         display: "flex",
-        width: "200%",
-        transform: `translateX(-${pageIndex * 50}%)`,
+        width: "300%",
+        transform: `translateX(-${pageIndex * (100 / 3)}%)`,
         transition: "transform 0.3s ease",
         minHeight: "100vh",
       }}>
         {/* Page 0: Activities (Week / Today toggle) */}
-        <div style={{ width: "50%", minHeight: "100vh", padding: "20px 16px 90px", overflowY: "auto" }}>
+        <div style={{ width: `${100 / 3}%`, minHeight: "100vh", padding: "20px 16px 90px", overflowY: "auto" }}>
           <div style={{ maxWidth: 1040, margin: "0 auto" }}>
             {/* User bar (shared) */}
             <div style={{
@@ -721,8 +722,13 @@ function AuthenticatedApp({ user }) {
         </div>
 
         {/* Page 1: Progress */}
-        <div style={{ width: "50%", minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
+        <div style={{ width: `${100 / 3}%`, minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
           <ProgressPage analytics={analytics} onHabitTap={handleLeaderboardTap} onBack={() => setPageIndex(0)} />
+        </div>
+
+        {/* Page 2: Streaks guide */}
+        <div style={{ width: `${100 / 3}%`, minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
+          <StreaksGuide />
         </div>
       </div>
 
@@ -766,6 +772,7 @@ function AuthenticatedApp({ user }) {
         {[
           { idx: 0, label: "Activities", icon: "🗓️" },
           { idx: 1, label: "Progress", icon: "📊" },
+          { idx: 2, label: "Streaks", icon: "ℹ️" },
         ].map(tab => (
           <button
             key={tab.idx}
