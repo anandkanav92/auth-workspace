@@ -11,8 +11,8 @@ const HOURS = getHourLabels(6, 22);
 
 // Layout constants — the gutter is sticky-left, each day column has a fixed
 // min width so 7 columns overflow on narrow screens instead of cutting off.
-const GUTTER_WIDTH = 48;
-const DAY_MIN_WIDTH = 132;
+const GUTTER_WIDTH = 52;
+const DAY_MIN_WIDTH = 164;
 
 export default function WeeklyView({
   weekOffset,
@@ -154,7 +154,7 @@ export default function WeeklyView({
           boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
           overflowX: "auto",
           overflowY: "auto",
-          maxHeight: "calc(100vh - 220px)",
+          maxHeight: "calc(100vh - 196px)",
         }}
       >
         {/* Inner track sized to the full 7-column width so columns keep their
@@ -192,14 +192,14 @@ export default function WeeklyView({
                     flex: "1 0 auto",
                     flexShrink: 0,
                     textAlign: "center",
-                    padding: "8px 2px",
+                    padding: "11px 4px",
                     borderRight: i < 6 ? `1px solid ${THEME.border}` : "none",
                     background: isToday ? THEME.accentTint : THEME.surfaceAlt,
                   }}
                 >
                   <div
                     style={{
-                      fontSize: 10,
+                      fontSize: 12,
                       fontWeight: 700,
                       color: isToday ? THEME.accentText : THEME.textMuted,
                       fontFamily: THEME.mono,
@@ -211,12 +211,12 @@ export default function WeeklyView({
                   </div>
                   <div
                     style={{
-                      fontSize: 16,
+                      fontSize: 19,
                       fontWeight: 700,
                       color: isToday ? "#fff" : THEME.text,
-                      marginTop: 2,
-                      width: 28,
-                      height: 28,
+                      marginTop: 3,
+                      width: 34,
+                      height: 34,
                       borderRadius: "50%",
                       display: "inline-flex",
                       alignItems: "center",
@@ -237,7 +237,7 @@ export default function WeeklyView({
               style={{
                 display: "flex",
                 borderBottom: `2px solid ${THEME.borderStrong}`,
-                minHeight: 36,
+                minHeight: 46,
               }}
             >
               <div
@@ -252,7 +252,7 @@ export default function WeeklyView({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 9,
+                  fontSize: 11,
                   fontWeight: 700,
                   color: THEME.textFaint,
                   fontFamily: THEME.mono,
@@ -277,11 +277,11 @@ export default function WeeklyView({
                       flexShrink: 0,
                       borderRight:
                         dayIdx < 6 ? `1px solid ${THEME.border}` : "none",
-                      padding: "3px 2px",
+                      padding: "6px 5px",
                       background: isToday ? THEME.accentTint : "transparent",
                       display: "flex",
                       flexDirection: "column",
-                      gap: 2,
+                      gap: 4,
                     }}
                   >
                     {dayHabits.map((habit) => {
@@ -316,7 +316,7 @@ export default function WeeklyView({
               style={{
                 display: "flex",
                 borderBottom: `1px solid ${THEME.border}`,
-                minHeight: 40,
+                minHeight: 54,
               }}
             >
               <div
@@ -331,8 +331,8 @@ export default function WeeklyView({
                   display: "flex",
                   alignItems: "flex-start",
                   justifyContent: "center",
-                  paddingTop: 4,
-                  fontSize: 10,
+                  paddingTop: 7,
+                  fontSize: 12,
                   fontWeight: 600,
                   color: THEME.textFaint,
                   fontFamily: THEME.mono,
@@ -357,11 +357,11 @@ export default function WeeklyView({
                       flexShrink: 0,
                       borderRight:
                         dayIdx < 6 ? `1px solid ${THEME.border}` : "none",
-                      padding: "3px 2px",
+                      padding: "6px 5px",
                       background: isToday ? THEME.accentTint : "transparent",
                       display: "flex",
                       flexDirection: "column",
-                      gap: 2,
+                      gap: 4,
                     }}
                   >
                     {cellHabits.map((habit) => {
@@ -432,35 +432,35 @@ function HabitChip({
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 3,
-        padding: "2px 4px",
-        borderRadius: 8,
+        gap: 6,
+        padding: "6px 9px",
+        borderRadius: 9,
         background: isDone ? THEME.doneSoft : THEME.surfaceAlt,
         // 1px frame on top/right/bottom; coral when done, warm hairline otherwise.
         borderTop: `1px solid ${isDone ? THEME.accentSoft : THEME.border}`,
         borderRight: `1px solid ${isDone ? THEME.accentSoft : THEME.border}`,
         borderBottom: `1px solid ${isDone ? THEME.accentSoft : THEME.border}`,
-        // Category color stays as the thin 3px left identity bar.
-        borderLeft: `3px solid ${color}`,
+        // Category color stays as the left identity bar.
+        borderLeft: `4px solid ${color}`,
         cursor: "pointer",
         opacity: vacationMode ? 0.4 : 1,
         pointerEvents: vacationMode ? "none" : "auto",
-        fontSize: 10,
-        lineHeight: 1.2,
-        minHeight: 22,
+        fontSize: 13,
+        lineHeight: 1.25,
+        minHeight: 34,
       }}
     >
-      {/* Mini checkbox — completion fills with coral */}
+      {/* Checkbox — completion fills with coral */}
       <div
         onClick={onToggle}
         style={{
-          width: 14,
-          height: 14,
-          borderRadius: 4,
+          width: 20,
+          height: 20,
+          borderRadius: 6,
           flexShrink: 0,
           border: isDone
-            ? `1.5px solid ${THEME.done}`
-            : `1.5px solid ${THEME.borderStrong}`,
+            ? `2px solid ${THEME.done}`
+            : `2px solid ${THEME.borderStrong}`,
           background: isDone ? THEME.done : "transparent",
           display: "flex",
           alignItems: "center",
@@ -469,7 +469,7 @@ function HabitChip({
         }}
       >
         {isDone && (
-          <span style={{ color: "#fff", fontSize: 8, fontWeight: 700 }}>
+          <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>
             ✓
           </span>
         )}
@@ -487,7 +487,7 @@ function HabitChip({
         }}
       >
         {habit.icon}{" "}
-        <span style={{ fontSize: 9 }}>{habit.name}</span>
+        <span style={{ fontSize: 12.5 }}>{habit.name}</span>
       </span>
     </div>
   );

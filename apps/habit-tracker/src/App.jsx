@@ -257,7 +257,7 @@ function AuthenticatedApp({ user }) {
       }}>
         {/* Page 0: Activities (Week / Today toggle) */}
         <div style={{ width: "50%", minHeight: "100vh", padding: "20px 16px 90px", overflowY: "auto" }}>
-          <div style={{ maxWidth: 900, margin: "0 auto" }}>
+          <div style={{ maxWidth: 1040, margin: "0 auto" }}>
             {/* User bar (shared) */}
             <div style={{
               display: "flex",
