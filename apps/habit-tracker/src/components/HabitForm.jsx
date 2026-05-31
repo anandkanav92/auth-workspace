@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import EmojiPicker from "./EmojiPicker";
-import { SHORT_DAYS, CATEGORY_PALETTE } from "../data/constants";
+import { SHORT_DAYS, CATEGORY_PALETTE, THEME } from "../data/constants";
 
 export default function HabitForm({ habit, categories, onSave, onDelete, onClose, onAddCategory }) {
   const isEdit = habit !== null && habit !== undefined;
@@ -91,7 +91,7 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#ffffff",
+          background: THEME.surface,
           borderRadius: "20px 20px 0 0",
           width: "100%",
           maxWidth: 600,
@@ -99,7 +99,7 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
           overflowY: "auto",
           padding: "24px 20px 40px",
           position: "relative",
-          border: "1px solid #e0e0eb",
+          border: `1px solid ${THEME.border}`,
           borderBottom: "none",
           boxShadow: "0 -4px 24px rgba(0,0,0,0.08)",
         }}
@@ -119,7 +119,7 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
               width: 36,
               height: 4,
               borderRadius: 2,
-              background: "#d0d0e0",
+              background: THEME.borderStrong,
               margin: "0 auto 20px",
             }}
           />
@@ -131,12 +131,12 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
               position: "absolute",
               top: 16,
               right: 16,
-              background: "#f5f5fa",
-              border: "1px solid #e0e0eb",
+              background: THEME.surfaceAlt,
+              border: `1px solid ${THEME.border}`,
               borderRadius: 8,
               width: 32,
               height: 32,
-              color: "#999",
+              color: THEME.textMuted,
               fontSize: 16,
               cursor: "pointer",
               display: "flex",
@@ -153,8 +153,8 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
               margin: "0 0 20px",
               fontSize: 22,
               fontWeight: 700,
-              color: "#1a1a2e",
-              fontFamily: "'DM Sans', sans-serif",
+              color: THEME.text,
+              fontFamily: THEME.sans,
             }}
           >
             {isEdit ? "Edit Habit" : "New Habit"}
@@ -167,8 +167,8 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 display: "block",
                 fontSize: 11,
                 fontWeight: 700,
-                color: "#999",
-                fontFamily: "'Space Mono', monospace",
+                color: THEME.textMuted,
+                fontFamily: THEME.mono,
                 letterSpacing: "1px",
                 marginBottom: 8,
               }}
@@ -185,8 +185,8 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 display: "block",
                 fontSize: 11,
                 fontWeight: 700,
-                color: "#999",
-                fontFamily: "'Space Mono', monospace",
+                color: THEME.textMuted,
+                fontFamily: THEME.mono,
                 letterSpacing: "1px",
                 marginBottom: 8,
               }}
@@ -203,16 +203,16 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 width: "100%",
                 padding: "12px 14px",
                 fontSize: 15,
-                fontFamily: "'DM Sans', sans-serif",
-                border: "1px solid #e8e8f0",
+                fontFamily: THEME.sans,
+                border: `1px solid ${THEME.border}`,
                 borderRadius: 12,
                 outline: "none",
-                background: "#fafafe",
-                color: "#1a1a2e",
+                background: THEME.surfaceAlt,
+                color: THEME.text,
                 boxSizing: "border-box",
               }}
-              onFocus={(e) => (e.target.style.borderColor = "#3B82F6")}
-              onBlur={(e) => (e.target.style.borderColor = "#e8e8f0")}
+              onFocus={(e) => (e.target.style.borderColor = THEME.accent)}
+              onBlur={(e) => (e.target.style.borderColor = THEME.border)}
             />
           </div>
 
@@ -223,8 +223,8 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 display: "block",
                 fontSize: 11,
                 fontWeight: 700,
-                color: "#999",
-                fontFamily: "'Space Mono', monospace",
+                color: THEME.textMuted,
+                fontFamily: THEME.mono,
                 letterSpacing: "1px",
                 marginBottom: 8,
               }}
@@ -252,14 +252,14 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                       gap: 6,
                       padding: "6px 12px",
                       borderRadius: 20,
-                      border: isActive ? `2px solid ${cat.color}` : "1px solid #e8e8f0",
-                      background: isActive ? `${cat.color}10` : "#fff",
+                      border: isActive ? `2px solid ${cat.color}` : `1px solid ${THEME.border}`,
+                      background: isActive ? `${cat.color}10` : THEME.surface,
                       cursor: "pointer",
                       whiteSpace: "nowrap",
                       fontSize: 13,
-                      fontFamily: "'DM Sans', sans-serif",
+                      fontFamily: THEME.sans,
                       fontWeight: isActive ? 600 : 400,
-                      color: isActive ? cat.color : "#666",
+                      color: isActive ? cat.color : THEME.textMuted,
                       flexShrink: 0,
                     }}
                   >
@@ -286,13 +286,13 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                   gap: 4,
                   padding: "6px 12px",
                   borderRadius: 20,
-                  border: "1px dashed #ccc",
-                  background: "#fafafe",
+                  border: `1px dashed ${THEME.accent}`,
+                  background: THEME.accentTint,
                   cursor: "pointer",
                   whiteSpace: "nowrap",
                   fontSize: 13,
-                  fontFamily: "'DM Sans', sans-serif",
-                  color: "#999",
+                  fontFamily: THEME.sans,
+                  color: THEME.accent,
                   flexShrink: 0,
                 }}
               >
@@ -306,9 +306,9 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 style={{
                   marginTop: 10,
                   padding: "12px 14px",
-                  background: "#fafafe",
+                  background: THEME.surfaceAlt,
                   borderRadius: 12,
-                  border: "1px solid #e8e8f0",
+                  border: `1px solid ${THEME.border}`,
                 }}
               >
                 <input
@@ -320,17 +320,17 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                     width: "100%",
                     padding: "8px 10px",
                     fontSize: 13,
-                    fontFamily: "'DM Sans', sans-serif",
-                    border: "1px solid #e8e8f0",
+                    fontFamily: THEME.sans,
+                    border: `1px solid ${THEME.border}`,
                     borderRadius: 8,
                     outline: "none",
-                    background: "#fff",
-                    color: "#1a1a2e",
+                    background: THEME.surface,
+                    color: THEME.text,
                     boxSizing: "border-box",
                     marginBottom: 10,
                   }}
-                  onFocus={(e) => (e.target.style.borderColor = "#3B82F6")}
-                  onBlur={(e) => (e.target.style.borderColor = "#e8e8f0")}
+                  onFocus={(e) => (e.target.style.borderColor = THEME.accent)}
+                  onBlur={(e) => (e.target.style.borderColor = THEME.border)}
                   autoFocus
                 />
                 <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
@@ -343,7 +343,7 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                         height: 28,
                         borderRadius: "50%",
                         background: color,
-                        border: newCategoryColor === color ? "3px solid #1a1a2e" : "2px solid transparent",
+                        border: newCategoryColor === color ? `3px solid ${THEME.text}` : "2px solid transparent",
                         cursor: "pointer",
                         flexShrink: 0,
                         outline: newCategoryColor === color ? "2px solid #fff" : "none",
@@ -360,11 +360,11 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                       padding: "6px 16px",
                       borderRadius: 8,
                       border: "none",
-                      background: newCategoryName.trim() ? "#3B82F6" : "#ccc",
+                      background: newCategoryName.trim() ? THEME.accent : THEME.borderStrong,
                       color: "#fff",
                       fontSize: 13,
                       fontWeight: 600,
-                      fontFamily: "'DM Sans', sans-serif",
+                      fontFamily: THEME.sans,
                       cursor: newCategoryName.trim() ? "pointer" : "default",
                     }}
                   >
@@ -379,11 +379,11 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                     style={{
                       padding: "6px 16px",
                       borderRadius: 8,
-                      border: "1px solid #e8e8f0",
-                      background: "#fff",
-                      color: "#999",
+                      border: `1px solid ${THEME.border}`,
+                      background: THEME.surface,
+                      color: THEME.textMuted,
                       fontSize: 13,
-                      fontFamily: "'DM Sans', sans-serif",
+                      fontFamily: THEME.sans,
                       cursor: "pointer",
                     }}
                   >
@@ -401,8 +401,8 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 display: "block",
                 fontSize: 11,
                 fontWeight: 700,
-                color: "#999",
-                fontFamily: "'Space Mono', monospace",
+                color: THEME.textMuted,
+                fontFamily: THEME.mono,
                 letterSpacing: "1px",
                 marginBottom: 8,
               }}
@@ -416,12 +416,12 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 style={{
                   padding: "8px 16px",
                   borderRadius: 20,
-                  border: isDaily ? "2px solid #3B82F6" : "1px solid #e8e8f0",
-                  background: isDaily ? "#3B82F6" : "#fff",
-                  color: isDaily ? "#fff" : "#666",
+                  border: isDaily ? `2px solid ${THEME.accent}` : `1px solid ${THEME.border}`,
+                  background: isDaily ? THEME.accent : THEME.surface,
+                  color: isDaily ? "#fff" : THEME.textMuted,
                   fontSize: 13,
                   fontWeight: 600,
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: THEME.sans,
                   cursor: "pointer",
                   flexShrink: 0,
                 }}
@@ -440,12 +440,12 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                       width: 36,
                       height: 36,
                       borderRadius: "50%",
-                      border: isActive ? "2px solid #3B82F6" : "1px solid #e8e8f0",
-                      background: isActive ? "#3B82F6" : "#f5f5fa",
-                      color: isActive ? "#fff" : "#999",
+                      border: isActive ? `2px solid ${THEME.accent}` : `1px solid ${THEME.border}`,
+                      background: isActive ? THEME.accent : THEME.surfaceAlt,
+                      color: isActive ? "#fff" : THEME.textMuted,
                       fontSize: 13,
                       fontWeight: 600,
-                      fontFamily: "'Space Mono', monospace",
+                      fontFamily: THEME.mono,
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
@@ -467,8 +467,8 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 display: "block",
                 fontSize: 11,
                 fontWeight: 700,
-                color: "#999",
-                fontFamily: "'Space Mono', monospace",
+                color: THEME.textMuted,
+                fontFamily: THEME.mono,
                 letterSpacing: "1px",
                 marginBottom: 8,
               }}
@@ -483,29 +483,29 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 style={{
                   padding: "8px 14px",
                   fontSize: 14,
-                  fontFamily: "'DM Sans', sans-serif",
-                  border: "1px solid #e8e8f0",
+                  fontFamily: THEME.sans,
+                  border: `1px solid ${THEME.border}`,
                   borderRadius: 12,
                   outline: "none",
-                  background: "#fafafe",
-                  color: time ? "#1a1a2e" : "#999",
+                  background: THEME.surfaceAlt,
+                  color: time ? THEME.text : THEME.textMuted,
                   width: 140,
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "#3B82F6")}
-                onBlur={(e) => (e.target.style.borderColor = "#e8e8f0")}
+                onFocus={(e) => (e.target.style.borderColor = THEME.accent)}
+                onBlur={(e) => (e.target.style.borderColor = THEME.border)}
               />
               {time && (
                 <button
                   onClick={() => setTime("")}
                   style={{
-                    background: "#f5f5fa",
-                    border: "1px solid #e8e8f0",
+                    background: THEME.surfaceAlt,
+                    border: `1px solid ${THEME.border}`,
                     borderRadius: 8,
                     padding: "6px 12px",
                     fontSize: 12,
-                    color: "#999",
+                    color: THEME.textMuted,
                     cursor: "pointer",
-                    fontFamily: "'Space Mono', monospace",
+                    fontFamily: THEME.mono,
                   }}
                 >
                   Clear
@@ -514,8 +514,8 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
               {!time && (
                 <span style={{
                   fontSize: 12,
-                  color: "#bbb",
-                  fontFamily: "'Space Mono', monospace",
+                  color: THEME.textFaint,
+                  fontFamily: THEME.mono,
                 }}>
                   All day
                 </span>
@@ -531,10 +531,10 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                 style={{
                   background: "none",
                   border: "none",
-                  color: "#3B82F6",
+                  color: THEME.accent,
                   fontSize: 13,
                   fontWeight: 500,
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: THEME.sans,
                   cursor: "pointer",
                   padding: 0,
                 }}
@@ -548,8 +548,8 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                     display: "block",
                     fontSize: 11,
                     fontWeight: 700,
-                    color: "#999",
-                    fontFamily: "'Space Mono', monospace",
+                    color: THEME.textMuted,
+                    fontFamily: THEME.mono,
                     letterSpacing: "1px",
                     marginBottom: 8,
                   }}
@@ -565,17 +565,17 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                     width: "100%",
                     padding: "12px 14px",
                     fontSize: 14,
-                    fontFamily: "'DM Sans', sans-serif",
-                    border: "1px solid #e8e8f0",
+                    fontFamily: THEME.sans,
+                    border: `1px solid ${THEME.border}`,
                     borderRadius: 12,
                     outline: "none",
-                    background: "#fafafe",
-                    color: "#1a1a2e",
+                    background: THEME.surfaceAlt,
+                    color: THEME.text,
                     resize: "vertical",
                     boxSizing: "border-box",
                   }}
-                  onFocus={(e) => (e.target.style.borderColor = "#3B82F6")}
-                  onBlur={(e) => (e.target.style.borderColor = "#e8e8f0")}
+                  onFocus={(e) => (e.target.style.borderColor = THEME.accent)}
+                  onBlur={(e) => (e.target.style.borderColor = THEME.border)}
                 />
               </div>
             )}
@@ -591,12 +591,12 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
               borderRadius: 12,
               border: "none",
               background: canSave
-                ? "linear-gradient(135deg, #3B82F6, #2563EB)"
-                : "#e0e0e8",
-              color: canSave ? "#fff" : "#aaa",
+                ? THEME.accentGradient
+                : THEME.border,
+              color: canSave ? "#fff" : THEME.textFaint,
               fontSize: 16,
               fontWeight: 700,
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: THEME.sans,
               cursor: canSave ? "pointer" : "default",
               marginBottom: isEdit ? 12 : 0,
             }}
@@ -660,11 +660,11 @@ export default function HabitForm({ habit, categories, onSave, onDelete, onClose
                   style={{
                     padding: "8px 24px",
                     borderRadius: 8,
-                    border: "1px solid #e8e8f0",
-                    background: "#f5f5fa",
-                    color: "#999",
+                    border: `1px solid ${THEME.border}`,
+                    background: THEME.surfaceAlt,
+                    color: THEME.textMuted,
                     fontSize: 13,
-                    fontFamily: "'DM Sans', sans-serif",
+                    fontFamily: THEME.sans,
                     cursor: "pointer",
                   }}
                 >

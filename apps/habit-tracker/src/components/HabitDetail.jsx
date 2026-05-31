@@ -1,6 +1,6 @@
 import StreakDots from "./StreakDots";
 import RestTimer from "./Timer";
-import { DAYS } from "../data/constants";
+import { DAYS, THEME } from "../data/constants";
 
 export default function HabitDetail({ habit, category, occurrences, onClose, onEdit, onToggleOccurrence, timerState, onSetTime, onStartTimer, onPauseTimer, onResetTimer }) {
   const scheduledLabel =
@@ -20,10 +20,10 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#ffffff", borderRadius: "20px 20px 0 0",
+          background: THEME.surface, borderRadius: "20px 20px 0 0",
           width: "100%", maxWidth: 600, maxHeight: "88vh", overflowY: "auto",
           padding: "24px 20px 40px", position: "relative",
-          border: "1px solid #e0e0eb", borderBottom: "none",
+          border: `1px solid ${THEME.border}`, borderBottom: "none",
           boxShadow: "0 -4px 24px rgba(0,0,0,0.08)",
         }}
       >
@@ -36,23 +36,23 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
         `}</style>
         <div className="modal-inner">
           {/* Drag handle */}
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "#d0d0e0", margin: "0 auto 20px" }} />
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: THEME.borderStrong, margin: "0 auto 20px" }} />
 
           {/* Edit button */}
           <button onClick={onEdit} style={{
             position: "absolute", top: 16, right: 56,
-            background: "#f5f5fa", border: "1px solid #e0e0eb",
+            background: THEME.surfaceAlt, border: `1px solid ${THEME.border}`,
             borderRadius: 8, width: 32, height: 32,
-            color: "#999", fontSize: 14, cursor: "pointer",
+            color: THEME.textMuted, fontSize: 14, cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>✏️</button>
 
           {/* Close button */}
           <button onClick={onClose} style={{
             position: "absolute", top: 16, right: 16,
-            background: "#f5f5fa", border: "1px solid #e0e0eb",
+            background: THEME.surfaceAlt, border: `1px solid ${THEME.border}`,
             borderRadius: 8, width: 32, height: 32,
-            color: "#999", fontSize: 16, cursor: "pointer",
+            color: THEME.textMuted, fontSize: 16, cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>×</button>
 
@@ -68,10 +68,10 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
             }}>
               {category.name}
             </div>
-            <h2 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "#1a1a2e" }}>
+            <h2 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: THEME.text }}>
               {habit.icon} {habit.name}
             </h2>
-            <p style={{ margin: 0, fontSize: 12, color: "#aaa", fontFamily: "'Space Mono', monospace" }}>
+            <p style={{ margin: 0, fontSize: 12, color: THEME.textFaint, fontFamily: THEME.mono }}>
               {scheduledLabel}
             </p>
           </div>
@@ -79,13 +79,13 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
           {/* Recent History */}
           <div style={{ marginBottom: 20 }}>
             <h3 style={{
-              fontSize: 11, fontWeight: 700, color: "#888", marginBottom: 10,
-              fontFamily: "'Space Mono', monospace", letterSpacing: "1px",
+              fontSize: 11, fontWeight: 700, color: THEME.textMuted, marginBottom: 10,
+              fontFamily: THEME.mono, letterSpacing: "1px",
             }}>
               RECENT HISTORY
             </h3>
             <StreakDots occurrences={occurrences} size="large" onToggle={onToggleOccurrence} />
-            <p style={{ margin: "8px 0 0", fontSize: 10, color: "#ccc", fontFamily: "'Space Mono', monospace" }}>
+            <p style={{ margin: "8px 0 0", fontSize: 10, color: THEME.textFaint, fontFamily: THEME.mono }}>
               Tap a dot to toggle · blue line = has notes
             </p>
           </div>
@@ -94,8 +94,8 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
           {timerState && (
             <div style={{ marginBottom: 20 }}>
               <h3 style={{
-                fontSize: 11, fontWeight: 700, color: "#888", marginBottom: 10,
-                fontFamily: "'Space Mono', monospace", letterSpacing: "1px",
+                fontSize: 11, fontWeight: 700, color: THEME.textMuted, marginBottom: 10,
+                fontFamily: THEME.mono, letterSpacing: "1px",
               }}>
                 REST TIMER
               </h3>
@@ -115,14 +115,14 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
           {habit.notes && (
             <div style={{ marginBottom: 20 }}>
               <h3 style={{
-                fontSize: 11, fontWeight: 700, color: "#F59E0B", marginBottom: 10,
-                fontFamily: "'Space Mono', monospace", letterSpacing: "1px",
+                fontSize: 11, fontWeight: 700, color: THEME.accentText, marginBottom: 10,
+                fontFamily: THEME.mono, letterSpacing: "1px",
               }}>
                 NOTES
               </h3>
               <div style={{
-                padding: "12px 14px", background: "#fffbf0", borderRadius: 10,
-                fontSize: 13, lineHeight: 1.6, color: "#555", border: "1px solid #f0e8d0",
+                padding: "12px 14px", background: THEME.surfaceAlt, borderRadius: 10,
+                fontSize: 13, lineHeight: 1.6, color: THEME.text, border: `1px solid ${THEME.border}`,
                 whiteSpace: "pre-line",
               }}>
                 {habit.notes}
@@ -133,8 +133,8 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
           {/* Schedule */}
           <div>
             <h3 style={{
-              fontSize: 11, fontWeight: 700, color: "#888", marginBottom: 10,
-              fontFamily: "'Space Mono', monospace", letterSpacing: "1px",
+              fontSize: 11, fontWeight: 700, color: THEME.textMuted, marginBottom: 10,
+              fontFamily: THEME.mono, letterSpacing: "1px",
             }}>
               SCHEDULE
             </h3>
@@ -146,10 +146,10 @@ export default function HabitDetail({ habit, category, occurrences, onClose, onE
                     width: 32, height: 32, borderRadius: 8,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 11, fontWeight: 600,
-                    fontFamily: "'Space Mono', monospace",
-                    background: active ? "#3B82F6" : "#f0f0f5",
-                    color: active ? "#fff" : "#bbb",
-                    border: active ? "1px solid #3B82F6" : "1px solid #e0e0eb",
+                    fontFamily: THEME.mono,
+                    background: active ? THEME.accent : THEME.surfaceAlt,
+                    color: active ? "#fff" : THEME.textFaint,
+                    border: active ? `1px solid ${THEME.accent}` : `1px solid ${THEME.border}`,
                   }}>
                     {day.slice(0, 2)}
                   </div>

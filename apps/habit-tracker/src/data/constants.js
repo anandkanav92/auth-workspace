@@ -1,6 +1,38 @@
 export const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 export const SHORT_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
+/**
+ * Warm Energetic design system — single source of truth for app chrome.
+ * Coral accent on a cream background with warm neutrals.
+ * Category colors (DEFAULT_CATEGORIES / CATEGORY_PALETTE) remain for habit data.
+ */
+export const THEME = {
+  accent: "#FB7185",        // coral — primary brand accent
+  accentHover: "#F43F5E",   // deeper coral for hover/press
+  accentGradient: "linear-gradient(135deg, #FB7185, #F43F5E)", // primary buttons / FAB
+  accentSoft: "#FFE4E6",    // light coral wash (selected backgrounds)
+  accentTint: "#FFF1F2",    // faintest coral (today column / hover rows)
+  accentText: "#BE123C",    // coral-dark text on light surfaces
+
+  bg: "#FFFBF6",            // cream app background
+  bgGradient: "linear-gradient(160deg, #FFFBF6 0%, #FFFFFF 55%, #FFF4EC 100%)",
+  surface: "#FFFFFF",       // cards
+  surfaceAlt: "#FBF7F2",    // subtle alt surface (gutters, headers)
+
+  border: "#F0E6DE",        // warm hairline border
+  borderStrong: "#E7D8CE",  // stronger warm border
+
+  text: "#2A1F1A",          // warm near-black
+  textMuted: "#8A7E76",     // warm gray
+  textFaint: "#BDB1A8",     // faint warm gray
+
+  done: "#FB7185",          // completion fill = coral (per chosen direction)
+  doneSoft: "#FFE4E6",      // completed row background wash
+
+  mono: "'Space Mono', monospace",
+  sans: "'DM Sans', 'Segoe UI', sans-serif",
+};
+
 export const DEFAULT_CATEGORIES = [
   { id: "fitness", name: "Fitness", color: "#E8453C" },
   { id: "learning", name: "Learning", color: "#3B82F6" },

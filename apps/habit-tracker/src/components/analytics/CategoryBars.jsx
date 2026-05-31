@@ -1,4 +1,5 @@
 import React from 'react';
+import { THEME } from '../../data/constants';
 
 export default function CategoryBars({ categoryStats }) {
   if (!categoryStats || categoryStats.length === 0) {
@@ -9,10 +10,10 @@ export default function CategoryBars({ categoryStats }) {
     <div style={{ marginBottom: 24 }}>
       <div
         style={{
-          fontFamily: "'Space Mono', monospace",
+          fontFamily: THEME.mono,
           fontSize: 11,
           fontWeight: 700,
-          color: '#888',
+          color: THEME.textMuted,
           letterSpacing: 1,
           textTransform: 'uppercase',
           marginBottom: 8,
@@ -23,9 +24,9 @@ export default function CategoryBars({ categoryStats }) {
 
       <div
         style={{
-          background: '#fff',
+          background: THEME.surface,
           borderRadius: 14,
-          border: '1px solid #e8e8f0',
+          border: `1px solid ${THEME.border}`,
           padding: '14px 16px',
           display: 'flex',
           flexDirection: 'column',
@@ -62,10 +63,10 @@ export default function CategoryBars({ categoryStats }) {
               />
               <span
                 style={{
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: THEME.sans,
                   fontSize: 12,
                   fontWeight: 600,
-                  color: '#555',
+                  color: THEME.text,
                   maxWidth: 80,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -81,7 +82,7 @@ export default function CategoryBars({ categoryStats }) {
               style={{
                 flex: 1,
                 height: 8,
-                background: '#f0f0f8',
+                background: THEME.surfaceAlt,
                 borderRadius: 4,
                 overflow: 'hidden',
               }}
@@ -102,10 +103,10 @@ export default function CategoryBars({ categoryStats }) {
             <div
               style={{
                 minWidth: 32,
-                fontFamily: "'Space Mono', monospace",
+                fontFamily: THEME.mono,
                 fontSize: 11,
                 fontWeight: 700,
-                color: '#555',
+                color: THEME.textMuted,
                 textAlign: 'right',
               }}
             >
