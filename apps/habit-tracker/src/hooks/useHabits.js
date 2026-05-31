@@ -97,8 +97,8 @@ export function useHabits(userId) {
     async function init() {
       const cutoff = cutoffDate();
       const [habitsRes, catsRes, compsRes, settingsRes] = await Promise.all([
-        pb.collection("habits").getFullList({ filter: `userId='${userId}'`, sort: "created" }),
-        pb.collection("categories").getFullList({ filter: `userId='${userId}'`, sort: "created" }),
+        pb.collection("habits").getFullList({ filter: `userId='${userId}'` }),
+        pb.collection("categories").getFullList({ filter: `userId='${userId}'` }),
         pb.collection("completions").getFullList({ filter: `userId='${userId}' && dateStr>='${cutoff}'` }),
         pb.collection("user_settings").getList(1, 1, { filter: `userId='${userId}'` }).catch(() => ({ items: [] })),
       ]);
