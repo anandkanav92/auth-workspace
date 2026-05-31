@@ -1,4 +1,11 @@
 import { useState } from "react";
+import { THEME } from "../data/constants";
+
+const STATUS_COLOR = {
+  done: "#10B981",    // green — success
+  missed: "#E8453C",  // red — missed
+  frozen: "#93c5fd",  // frost blue — streak freeze (paired with a ❄️ below)
+};
 
 export default function StreakDots({ occurrences, size = "small", onToggle }) {
   const isLarge = size === "large";
@@ -28,24 +35,25 @@ export default function StreakDots({ occurrences, size = "small", onToggle }) {
                 } : undefined}
                 style={{
                   width: dotSize, height: dotSize, borderRadius: "50%",
-                  background: occ.status === "done" ? "#10B981" : occ.status === "frozen" ? "#93c5fd" : "#E8453C",
+                  background: STATUS_COLOR[occ.status] ?? STATUS_COLOR.missed,
                   cursor: isLarge ? "pointer" : "default",
                   transition: "background 0.2s ease",
                 }}
               />
-              {/* Note indicator line */}
-              {isLarge && hasNotes && (
-                <div style={{
-                  width: 8, height: 2, borderRadius: 1,
-                  background: "#3B82F6", marginTop: -2,
-                }} />
-              )}
+              {/* Freeze marker */}
               {isLarge && occ.status === "frozen" && (
-                <div style={{ fontSize: 8, marginTop: -2 }}>❄️</div>
+                <div style={{ fontSize: 10, marginTop: -1 }}>❄️</div>
+              )}
+              {/* Note indicator — neutral underline (blue is reserved for freeze) */}
+              {isLarge && hasNotes && occ.status !== "frozen" && (
+                <div style={{
+                  width: 10, height: 2, borderRadius: 1,
+                  background: THEME.textMuted, marginTop: 0,
+                }} />
               )}
               {isLarge && !hasNotes && occ.status !== "frozen" && <div style={{ height: 2 }} />}
               {isLarge && (
-                <span style={{ fontSize: 9, color: "#aaa", fontFamily: "'Space Mono', monospace", whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: 9, color: THEME.textFaint, fontFamily: THEME.mono, whiteSpace: "nowrap" }}>
                   {formatShortDate(occ.date)}
                 </span>
               )}
@@ -53,22 +61,35 @@ export default function StreakDots({ occurrences, size = "small", onToggle }) {
           );
         })}
         {display.length === 0 && (
-          <span style={{ fontSize: isLarge ? 12 : 10, color: "#ccc" }}>
+          <span style={{ fontSize: isLarge ? 12 : 10, color: THEME.textFaint }}>
             {isLarge ? "No history yet" : ""}
           </span>
         )}
       </div>
 
+      {/* Legend — only in the detailed view */}
+      {isLarge && display.length > 0 && (
+        <div style={{
+          display: "flex", flexWrap: "wrap", gap: "6px 14px",
+          fontSize: 10, color: THEME.textMuted, fontFamily: THEME.mono,
+        }}>
+          <LegendItem dot={STATUS_COLOR.done} label="Done" />
+          <LegendItem dot={STATUS_COLOR.missed} label="Missed" />
+          <LegendItem icon="❄️" label="Freeze" />
+          <LegendItem line label="Notes" />
+        </div>
+      )}
+
       {/* Expanded note card */}
       {isLarge && expandedIdx !== null && display[expandedIdx] && (display[expandedIdx].notes || display[expandedIdx].effort !== null) && (
         <div style={{
-          padding: "8px 12px", background: "#f9f9fc", borderRadius: 8,
-          border: "1px solid #e8e8f0", fontSize: 12, color: "#555",
+          padding: "8px 12px", background: THEME.surfaceAlt, borderRadius: 8,
+          border: `1px solid ${THEME.border}`, fontSize: 12, color: THEME.text,
         }}>
           {display[expandedIdx].effort !== null && (
             <div style={{
-              fontSize: 11, fontWeight: 600, color: "#888",
-              fontFamily: "'Space Mono', monospace", marginBottom: display[expandedIdx].notes ? 4 : 0,
+              fontSize: 11, fontWeight: 600, color: THEME.textMuted,
+              fontFamily: THEME.mono, marginBottom: display[expandedIdx].notes ? 4 : 0,
             }}>
               Effort: {display[expandedIdx].effort}/10
             </div>
@@ -81,5 +102,21 @@ export default function StreakDots({ occurrences, size = "small", onToggle }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Single key entry: a colored dot, an icon, or a neutral underline + label. */
+function LegendItem({ dot, icon, line, label }) {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+      {dot && (
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot }} />
+      )}
+      {icon && <span style={{ fontSize: 10 }}>{icon}</span>}
+      {line && (
+        <span style={{ width: 10, height: 2, borderRadius: 1, background: THEME.textMuted }} />
+      )}
+      {label}
+    </span>
   );
 }
