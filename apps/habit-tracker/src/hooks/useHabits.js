@@ -9,7 +9,7 @@ function cutoffDate() {
   return toDateStr(d);
 }
 
-function recordToHabit(r) {
+export function recordToHabit(r) {
   return {
     id: r.id,
     userId: r.userId || "",
