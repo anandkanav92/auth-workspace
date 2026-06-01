@@ -201,15 +201,6 @@ function AuthenticatedApp({ user }) {
       return a.time.localeCompare(b.time);
     });
 
-  // Group habits by categoryId
-  const groupedByCategory = {};
-  todaysHabits.forEach((habit) => {
-    if (!groupedByCategory[habit.categoryId]) {
-      groupedByCategory[habit.categoryId] = [];
-    }
-    groupedByCategory[habit.categoryId].push(habit);
-  });
-
   const totalHabits = todaysHabits.length;
   const doneCount = todaysHabits.filter(
     (h) => completions[`${h.id}-${dateStr}`]
@@ -515,54 +506,16 @@ function AuthenticatedApp({ user }) {
 
             {/* Habit List */}
             {totalHabits > 0 ? (
-              Object.entries(groupedByCategory).map(
-                ([categoryId, habitsInCategory]) => {
-                  const category = getCategory(categoryId);
-                  return (
-                    <div key={categoryId} style={{ marginBottom: 16 }}>
-                      {/* Category header */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          marginBottom: 8,
-                          paddingLeft: 4,
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            background: category.color,
-                          }}
-                        />
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: category.color,
-                            fontFamily: "'Space Mono', monospace",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                          }}
-                        >
-                          {category.name}
-                        </span>
-                      </div>
+              todaysHabits.map((habit) => {
+                const isChecked = !!completions[`${habit.id}-${dateStr}`];
+                const occurrences = getLast5Occurrences(
+                  habit,
+                  completions,
+                  viewDate
+                );
+                const category = getCategory(habit.categoryId);
 
-                      {/* Habits in this category */}
-                      {habitsInCategory.map((habit) => {
-                        const isChecked =
-                          !!completions[`${habit.id}-${dateStr}`];
-                        const occurrences = getLast5Occurrences(
-                          habit,
-                          completions,
-                          viewDate
-                        );
-
-                        return (
+                return (
                           <div
                             key={habit.id}
                             onClick={() => setSelectedHabit(habit)}
@@ -624,23 +577,11 @@ function AuthenticatedApp({ user }) {
                               )}
                             </div>
 
-                            {/* Category color bar */}
-                            <div
-                              style={{
-                                width: 4,
-                                height: 28,
-                                borderRadius: 2,
-                                background: category.color,
-                                flexShrink: 0,
-                                opacity: 0.7,
-                              }}
-                            />
-
                             {/* Habit info */}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div
                                 style={{
-                                  fontSize: 13,
+                                  fontSize: 14,
                                   fontWeight: 500,
                                   color: isChecked ? THEME.accentText : THEME.text,
                                   textDecoration: isChecked
@@ -651,16 +592,35 @@ function AuthenticatedApp({ user }) {
                               >
                                 {habit.icon} {habit.name}
                               </div>
-                              {habit.time && (
-                                <div style={{
+                              {/* Category + time — small, non-intrusive */}
+                              <div style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 5,
+                                marginTop: 3,
+                              }}>
+                                <span style={{
+                                  width: 7,
+                                  height: 7,
+                                  borderRadius: "50%",
+                                  background: category.color,
+                                  flexShrink: 0,
+                                }} />
+                                <span style={{
                                   fontSize: 11,
                                   color: THEME.textMuted,
                                   fontFamily: THEME.mono,
-                                  marginTop: 1,
                                 }}>
-                                  {formatTime(habit.time)}
-                                </div>
-                              )}
+                                  {category.name}
+                                </span>
+                                <span style={{
+                                  fontSize: 11,
+                                  color: THEME.textFaint,
+                                  fontFamily: THEME.mono,
+                                }}>
+                                  · {habit.time ? formatTime(habit.time) : "All day"}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Streak dots */}
@@ -680,12 +640,8 @@ function AuthenticatedApp({ user }) {
                               ›
                             </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  );
-                }
-              )
+                );
+              })
             ) : (
               /* Empty state */
               <div
