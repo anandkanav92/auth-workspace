@@ -6,18 +6,17 @@ import { unlockAudio, playAlarm } from "./components/Timer";
 import FloatingTimerPill from "./components/FloatingTimerPill";
 import HabitForm from "./components/HabitForm";
 import HabitDetail from "./components/HabitDetail";
-import StreakDots from "./components/StreakDots";
 import LoginPage from "./components/LoginPage";
 import CompletionNotes from "./components/CompletionNotes";
 import ProgressPage from "./components/ProgressPage";
 import WeeklyView from "./components/WeeklyView";
+import DailyAgenda from "./components/DailyAgenda";
 import StreaksGuide from "./components/StreaksGuide";
 import {
   getDateForOffset,
   getJsDayToOurDay,
   toDateStr,
   formatDateHeader,
-  formatTime,
   getLast5Occurrences,
   THEME,
 } from "./data/constants";
@@ -506,142 +505,24 @@ function AuthenticatedApp({ user }) {
 
             {/* Habit List */}
             {totalHabits > 0 ? (
-              todaysHabits.map((habit) => {
-                const isChecked = !!completions[`${habit.id}-${dateStr}`];
-                const occurrences = getLast5Occurrences(
-                  habit,
-                  completions,
-                  viewDate
-                );
-                const category = getCategory(habit.categoryId);
-
-                return (
-                          <div
-                            key={habit.id}
-                            onClick={() => setSelectedHabit(habit)}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 10,
-                              padding: "10px 12px",
-                              borderRadius: 10,
-                              background: isChecked ? THEME.doneSoft : THEME.surface,
-                              border: `1px solid ${isChecked ? THEME.accentSoft : THEME.border}`,
-                              marginBottom: 6,
-                              cursor: "pointer",
-                              opacity: vacationMode ? 0.4 : 1,
-                              pointerEvents: vacationMode ? "none" : "auto",
-                            }}
-                          >
-                            {/* Checkbox */}
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const key = `${habit.id}-${dateStr}`;
-                                const isDone = !!completions[key];
-                                toggleCompletion(habit.id, dateStr);
-                                // Show notes sheet only when completing (not uncompleting)
-                                if (!isDone) {
-                                  setCompletionNotesHabit(habit);
-                                  setCompletionNotesDateStr(dateStr);
-                                }
-                              }}
-                              style={{
-                                width: 24,
-                                height: 24,
-                                borderRadius: 7,
-                                flexShrink: 0,
-                                border: isChecked
-                                  ? `2px solid ${THEME.done}`
-                                  : `2px solid ${THEME.borderStrong}`,
-                                background: isChecked
-                                  ? THEME.done
-                                  : "transparent",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                transition: "all 0.2s ease",
-                                cursor: "pointer",
-                              }}
-                            >
-                              {isChecked && (
-                                <span
-                                  style={{
-                                    color: "#fff",
-                                    fontSize: 13,
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  ✓
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Habit info */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div
-                                style={{
-                                  fontSize: 14,
-                                  fontWeight: 500,
-                                  color: isChecked ? THEME.accentText : THEME.text,
-                                  textDecoration: isChecked
-                                    ? "line-through"
-                                    : "none",
-                                  opacity: isChecked ? 0.7 : 1,
-                                }}
-                              >
-                                {habit.icon} {habit.name}
-                              </div>
-                              {/* Category + time — small, non-intrusive */}
-                              <div style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 5,
-                                marginTop: 3,
-                              }}>
-                                <span style={{
-                                  width: 7,
-                                  height: 7,
-                                  borderRadius: "50%",
-                                  background: category.color,
-                                  flexShrink: 0,
-                                }} />
-                                <span style={{
-                                  fontSize: 11,
-                                  color: THEME.textMuted,
-                                  fontFamily: THEME.mono,
-                                }}>
-                                  {category.name}
-                                </span>
-                                <span style={{
-                                  fontSize: 11,
-                                  color: THEME.textFaint,
-                                  fontFamily: THEME.mono,
-                                }}>
-                                  · {habit.time ? formatTime(habit.time) : "All day"}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Streak dots */}
-                            <StreakDots
-                              occurrences={occurrences}
-                              size="small"
-                            />
-
-                            {/* Chevron */}
-                            <span
-                              style={{
-                                color: THEME.textFaint,
-                                fontSize: 14,
-                                flexShrink: 0,
-                              }}
-                            >
-                              ›
-                            </span>
-                          </div>
-                );
-              })
+              <DailyAgenda
+                habits={todaysHabits}
+                dateStr={dateStr}
+                viewDate={viewDate}
+                completions={completions}
+                getCategory={getCategory}
+                vacationMode={vacationMode}
+                onToggle={(habit) => {
+                  const isDone = !!completions[`${habit.id}-${dateStr}`];
+                  toggleCompletion(habit.id, dateStr);
+                  // Show notes sheet only when completing (not uncompleting)
+                  if (!isDone) {
+                    setCompletionNotesHabit(habit);
+                    setCompletionNotesDateStr(dateStr);
+                  }
+                }}
+                onOpenHabit={(habit) => setSelectedHabit(habit)}
+              />
             ) : (
               /* Empty state */
               <div
