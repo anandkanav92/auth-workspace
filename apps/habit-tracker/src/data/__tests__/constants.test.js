@@ -80,6 +80,17 @@ describe("toDateStr", () => {
     const date = new Date("2025-12-03T12:00:00Z");
     expect(toDateStr(date)).toBe("2025-12-03");
   });
+
+  // Regression: daily view (local time) and weekly view (local midnight) must
+  // produce the SAME key for a given calendar day, regardless of timezone.
+  // The old toISOString() impl rolled local midnight back a day in UTC+ zones.
+  it("uses the local calendar date — midnight and noon match, no roll-back", () => {
+    const midnight = new Date(2025, 4, 21, 0, 0, 0); // local midnight, 21 May
+    const noon = new Date(2025, 4, 21, 12, 0, 0); // local noon, 21 May
+    expect(toDateStr(midnight)).toBe("2025-05-21");
+    expect(toDateStr(noon)).toBe("2025-05-21");
+    expect(toDateStr(midnight)).toBe(toDateStr(noon));
+  });
 });
 
 // ─── getJsDayToOurDay ─────────────────────────────────────────────

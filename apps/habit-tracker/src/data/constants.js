@@ -59,7 +59,15 @@ export function generateId() {
 }
 
 export function toDateStr(date) {
-  return date.toISOString().split("T")[0];
+  // Use LOCAL date parts, not toISOString() (UTC). A Date at local midnight
+  // would otherwise roll back a day in any UTC+ timezone, so the weekly view
+  // (built from local-midnight dates) and the daily view (built from the
+  // current local time) produced different keys for the same calendar day —
+  // breaking completion sync between the two views.
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /** Converts JS day (0=Sun, 1=Mon, ..., 6=Sat) to our day (0=Mon, ..., 6=Sun) */
