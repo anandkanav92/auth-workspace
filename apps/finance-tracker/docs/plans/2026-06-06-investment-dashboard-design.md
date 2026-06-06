@@ -103,8 +103,8 @@ Cloudflare Tunnel routes `invest.cya.run` → BFF only. PocketBase has no host p
   ticker:         string,
   isin:           string?,
   quantity:       number,
-  cost_basis:     number,
-  cost_currency:  string,
+  cost_basis:     number?,   // nullable — Revolut PDF has no cost basis (spike 2)
+  cost_currency:  string?,   // nullable — present only when cost_basis is
   source:         "revolut" | "trading212" | "manual",
   notes:          string?,
 }
@@ -243,14 +243,18 @@ export type ParsedStatement = {
     ticker: string;          // resolved from ISIN when present
     isin?: string;
     quantity: number;
-    cost_basis: number;
-    cost_currency: string;
+    cost_basis?: number;     // nullable — Revolut has none (spike 2)
+    cost_currency?: string;
   }>;
 };
 ```
 
-- **`Trading212CsvImporter`** — column schema is stable (`Action, Time, ISIN, Ticker, Name, No. of shares, Price/share, Currency, ...`). Parse with `papaparse`. ISIN is the primary join key.
-- **`RevolutXlsxImporter`** — modern Revolut Trading exports are `.xlsx`. Parse with SheetJS (`xlsx`). PDF fallback deferred to v1.5 with a clear error message.
+**Both brokers export PDF** (confirmed by real statements — spike 2 results). Importers parse PDF, using a position-aware extractor (pdf.js text-with-coordinates, or `pdfreader`) that locates the one relevant table by header detection:
+
+- **`Trading212PdfImporter`** — locates the **"Invest account – open positions summary"** table (11 columns: `INSTRUMENT, ISIN, INSTRUMENT CURRENCY, QUANTITY, AVERAGE PRICE, PRICE, RETURN, VALUE, FX RATE, RETURN (EUR), VALUE (EUR)`). ISIN is the primary join key; `AVERAGE PRICE × QUANTITY` gives cost basis.
+- **`RevolutPdfImporter`** — locates the **"USD Portfolio breakdown"** table (7 columns: `Symbol, Company, ISIN, Quantity, Price, Value, % of Portfolio`). ISIN is the join key. **No cost basis** in this table → positions imported with `cost_basis = null`. Reconstructing cost from the transaction history (which involves stock splits + an entity transfer) is out of v1 scope.
+
+A shared `safe-pdf` harness enforces size/page caps and text-only extraction (pdf.js disables scripting by default). See spike results: `docs/spikes/2026-06-06-spikes-1-2-results.md`.
 
 ### Update strategy: snapshot-replace
 

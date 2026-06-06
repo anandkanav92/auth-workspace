@@ -6,7 +6,7 @@
 
 **Architecture:** Vite + React 19 + TS PWA → Hono BFF → PocketBase (per-user data + shared market data). Yahoo Finance primary + Finnhub fallback + ECB FX. Firebase Google Auth. Snapshot-replace upload semantics; transactions log for manual events; nightly `holdings_snapshot` cron for history.
 
-**Tech Stack:** Vite 8, React 19, TypeScript 5, Tailwind CSS v4, shadcn/ui, ECharts via echarts-for-react, Framer Motion, TanStack Query + Router, Hono, yahoo-finance2, finnhub, PocketBase JS SDK, papaparse, sheetjs/xlsx, zod, vitest, playwright (smoke only).
+**Tech Stack:** Vite 8, React 19, TypeScript 5, Tailwind CSS v4, shadcn/ui, ECharts via echarts-for-react, Framer Motion, TanStack Query + Router, Hono, yahoo-finance2 (v3, `new YahooFinance()`), finnhub, PocketBase JS SDK, pdfjs-dist (PDF statement parsing), fast-xml-parser (ECB), zod, vitest, playwright (smoke only).
 
 **Reference:** See `2026-06-06-investment-dashboard-design.md` in this folder for the full validated design.
 
@@ -28,7 +28,7 @@
 | 9 | Frontend: theming + layout shell | 0 | Hero strip + bottom tab bar + light/dark toggle render in both modes |
 | 10 | Frontend: auth gate + routing | 2, 9 | Sign in, sign out work end-to-end; protected routes redirect |
 | 11 | Frontend: tile components | 4, 5, 7, 9 | All 6 Phase 1 tiles render correctly against fixture portfolio |
-| 12 | Frontend: upload + import UX | 6, 9 | Drag-drop CSV/XLSX → preview screen → confirm writes; idempotency on re-upload |
+| 12 | Frontend: upload + import UX | 6, 9 | Drag-drop PDF → preview screen → confirm writes; idempotency on re-upload |
 | 13 | Frontend: search + add position UX | 7, 9 | Cmd-K → ticker → add modal → holding appears in dashboard |
 | 14 | Frontend: holdings list + sell UX | 5, 11 | Holdings page renders; sell flow writes transaction + decrements holding |
 | 15 | Polish pass (skeletons, animations, empty states, undo) | 11–14 | Lighthouse PWA score ≥ 90; UI checklist green |
@@ -1175,123 +1175,117 @@ Commit: `test(finance-tracker): e2e portfolio lifecycle`
 
 ## Milestone 6 — Statement importers
 
-**Goal:** Trading 212 CSV + Revolut XLSX parse to `ParsedStatement`; import endpoint roundtrips with preview/commit semantics.
+**Goal:** Trading 212 PDF + Revolut PDF parse to `ParsedStatement`; import endpoint roundtrips with preview/commit semantics.
 
-### Task 6.0: Excel parsing safety harness
+> **Spikes 1 & 2 changed this milestone (see `docs/spikes/2026-06-06-spikes-1-2-results.md`).** Both brokers export **PDF**, not CSV/XLSX. We parse PDF tables. Trading 212's "open positions" table carries cost basis; Revolut's "portfolio breakdown" does not (positions imported with `cost_basis = null`). The earlier `safe-xlsx` / CSV / XLSX tasks are replaced by the PDF tasks below.
 
-**Reviewer fix (B6):** SheetJS (`xlsx`) on user-uploaded files is a known security surface — historical CVEs around prototype pollution, formula injection, and zip-bomb DoS. Mitigations before any importer code lands.
+### Task 6.0: PDF parsing safety harness
+
+User-uploaded PDFs are an untrusted-input surface. We use `pdfjs-dist` (Mozilla pdf.js) which disables JS execution in PDFs by default, plus our own size/page caps and a parse timeout. PDFs here are digitally generated (clean text), so this is position-aware text extraction, **not** OCR.
 
 **Files:**
-- Modify: `apps/finance-tracker/server/package.json` — pin a vetted xlsx source
-- Create: `apps/finance-tracker/server/src/importers/safe-xlsx.ts`
-- Create: `apps/finance-tracker/server/tests/importers/safe-xlsx.test.ts`
+- Modify: `apps/finance-tracker/server/package.json` — add `pdfjs-dist`
+- Create: `apps/finance-tracker/server/src/importers/safe-pdf.ts`
+- Create: `apps/finance-tracker/server/tests/importers/safe-pdf.test.ts`
 
-**Step 1 — Pin the dep**
-
-Use `@e965/xlsx` (community-maintained drop-in) or the official paid CDN — *not* the npm `xlsx` package. Add to deps:
+**Step 1 — Dep**
 ```json
-"@e965/xlsx": "^0.20.0"
+"pdfjs-dist": "^4.5.0"
 ```
 
-**Step 2 — Implement a single chokepoint for parsing**
+**Step 2 — Chokepoint: extract positioned text items, one array per page**
 
 ```ts
-// src/importers/safe-xlsx.ts
-import * as XLSX from '@e965/xlsx';
+// src/importers/safe-pdf.ts
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024;   // 10 MB
-const MAX_SHEETS = 20;
-const MAX_ROWS_PER_SHEET = 10_000;
+const MAX_FILE_BYTES = 15 * 1024 * 1024;   // 15 MB
+const MAX_PAGES = 40;
+const PARSE_TIMEOUT_MS = 15_000;
 
-export class XlsxParseError extends Error { constructor(msg: string) { super(msg); this.name = 'XlsxParseError'; } }
+export class PdfParseError extends Error { constructor(msg: string) { super(msg); this.name = 'PdfParseError'; } }
 
-export function parseXlsxSafely(buffer: Buffer): XLSX.WorkBook {
-  if (buffer.length > MAX_FILE_BYTES) {
-    throw new XlsxParseError(`file too large: ${buffer.length} > ${MAX_FILE_BYTES}`);
-  }
-  const wb = XLSX.read(buffer, {
-    type: 'buffer',
-    cellFormula: false,    // disable formula evaluation
-    cellHTML: false,       // disable HTML interpretation
-    sheetStubs: false,
-    bookVBA: false,
-  });
-  if (wb.SheetNames.length > MAX_SHEETS) {
-    throw new XlsxParseError(`too many sheets: ${wb.SheetNames.length}`);
-  }
-  for (const name of wb.SheetNames) {
-    const sheet = wb.Sheets[name];
-    const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
-    if (range.e.r - range.s.r > MAX_ROWS_PER_SHEET) {
-      throw new XlsxParseError(`sheet "${name}" exceeds ${MAX_ROWS_PER_SHEET} rows`);
+export type PositionedText = { str: string; x: number; y: number; page: number };
+
+export async function extractPositionedText(buffer: Buffer): Promise<PositionedText[]> {
+  if (buffer.length > MAX_FILE_BYTES) throw new PdfParseError(`file too large: ${buffer.length}`);
+
+  const task = pdfjs.getDocument({ data: new Uint8Array(buffer), isEvalSupported: false });
+  const doc = await withTimeout(task.promise, PARSE_TIMEOUT_MS, 'pdf load');
+  if (doc.numPages > MAX_PAGES) throw new PdfParseError(`too many pages: ${doc.numPages}`);
+
+  const out: PositionedText[] = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent();
+    for (const item of content.items as any[]) {
+      if (!item.str?.trim()) continue;
+      out.push({ str: item.str, x: item.transform[4], y: item.transform[5], page: p });
     }
   }
-  return wb;
+  return out;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new PdfParseError(`${label} timed out`)), ms)),
+  ]);
 }
 ```
 
-**Step 3 — Tests**
+**Step 3 — A table-reconstruction helper** (`src/importers/pdf-table.ts`): group `PositionedText` items into rows by `y` (within a tolerance), order cells within a row by `x`, and slice the rows between a detected header row and the next section heading. Tested against fixtures in 6.2 / 6.3.
 
-```ts
-import { describe, it, expect } from 'vitest';
-import { parseXlsxSafely, XlsxParseError } from '../../src/importers/safe-xlsx';
+**Step 4 — Tests:** oversize buffer throws; non-PDF garbage throws; a known fixture returns >0 positioned items with sane coordinates.
 
-describe('parseXlsxSafely', () => {
-  it('rejects oversize files', () => {
-    expect(() => parseXlsxSafely(Buffer.alloc(11 * 1024 * 1024))).toThrow(XlsxParseError);
-  });
-  it('rejects non-xlsx garbage', () => {
-    expect(() => parseXlsxSafely(Buffer.from('not a real xlsx'))).toThrow();
-  });
-  // load a fixture xlsx with a formula cell, parse, assert no formula execution
-});
-```
-
-**Step 4 — Commit**
-
+**Step 5 — Commit**
 ```bash
-git add apps/finance-tracker/server/src/importers/safe-xlsx.ts \
-        apps/finance-tracker/server/tests/importers/safe-xlsx.test.ts \
-        apps/finance-tracker/server/package.json
-git commit -m "feat(finance-tracker): xlsx parse safety harness (size/sheet/row caps, no formulas)"
+git commit -m "feat(finance-tracker): safe-pdf harness (size/page caps, timeout, no eval)"
 ```
 
-All XLSX parsing throughout the app **must** go through `parseXlsxSafely()`. Lint rule (M0): a custom ESLint rule or grep-based pre-commit check that blocks raw `XLSX.read(` imports outside `safe-xlsx.ts`.
+All PDF parsing **must** go through `extractPositionedText()`. M0 lint/grep check blocks raw `getDocument(` outside `safe-pdf.ts`.
 
 ### Task 6.1: StatementImporter interface + ISIN→ticker resolution helper
 
-Create `server/src/importers/types.ts` (interface from design §6).
+Create `server/src/importers/types.ts` (interface from design §6 — note `cost_basis?` and `cost_currency?` are **optional**).
 
-Create `server/src/importers/resolveTicker.ts`: given an ISIN, hit `symbol_profiles` cache; if miss, call `YahooPriceProvider.search(isin)` (Yahoo accepts ISINs in search), cache the result.
+Create `server/src/importers/resolveTicker.ts`: given an ISIN, hit `symbol_profiles` cache; if miss, call `YahooPriceProvider.search(isin)` (Yahoo accepts ISINs in search), cache the result. ISIN is the canonical join key for both brokers (both PDFs always populate it — confirmed in spikes).
 
 Commit: `feat(finance-tracker): add importer interface + ISIN resolver`
 
-### Task 6.2: Trading212CsvImporter
+### Task 6.2: Trading212PdfImporter
 
 **Files:**
 - Create: `server/src/importers/trading212.ts`
 - Create: `server/tests/importers/trading212.test.ts`
-- Create: `server/tests/fixtures/t212-sample.csv`
+- Create: `server/tests/fixtures/t212-positions-redacted.pdf` (1-page, holdings table only, PII stripped)
 
-Use the documented T212 CSV schema:
+**Approach:** `detect()` matches the "TRADING 212" + "Activity statement" text markers. `parse()` uses `extractPositionedText()` + `pdf-table.ts` to locate the **"Invest account – open positions summary"** table by its header row (`INSTRUMENT ISIN ... AVERAGE PRICE ... VALUE (EUR)`), then reads rows until the section ends. For each row emit:
+```ts
+{ ticker: <resolved from ISIN>, isin, quantity: QUANTITY,
+  cost_basis: QUANTITY * AVERAGE_PRICE, cost_currency: INSTRUMENT_CURRENCY }
 ```
-Action,Time,ISIN,Ticker,Name,No. of shares,Price / share,Currency (Price / share),Exchange rate,...
-```
 
-Aggregate buy/sell actions into net positions per ticker. Test with a fixture CSV containing 3 buys + 1 sell of the same ticker; expect net position with cost-basis-averaged.
+Test against the redacted fixture: assert a known position (e.g. AAPL, ISIN US0378331005) parses with correct quantity and a non-null cost basis; assert an ETF row (e.g. SGLN) parses; assert row count matches the fixture.
 
-Commit: `feat(finance-tracker): add Trading212CsvImporter`
+Commit: `feat(finance-tracker): add Trading212PdfImporter`
 
-### Task 6.3: RevolutXlsxImporter
+### Task 6.3: RevolutPdfImporter
 
 **Files:**
 - Create: `server/src/importers/revolut.ts`
 - Create: `server/tests/importers/revolut.test.ts`
-- Create: `server/tests/fixtures/revolut-sample.xlsx`
+- Create: `server/tests/fixtures/revolut-portfolio-redacted.pdf` (1-page, breakdown table only, PII stripped)
 
-Use SheetJS (`xlsx`). Find the "Positions" or "Holdings" section by header detection. Map columns. Test asserts a known position exists in the parsed output.
+**Approach:** `detect()` matches "Revolut" + "Account Statement". `parse()` locates the **"USD Portfolio breakdown"** table by header (`Symbol Company ISIN Quantity Price Value % of Portfolio`), reads rows until "Positions Value". For each row emit:
+```ts
+{ ticker: <Symbol, verified against ISIN>, isin, quantity: Quantity,
+  cost_basis: undefined, cost_currency: undefined }   // spike 2: no cost basis
+```
 
-Commit: `feat(finance-tracker): add RevolutXlsxImporter`
+Test against the redacted fixture: assert a known position (e.g. META, ISIN US30303M1027) parses with correct quantity and `cost_basis === undefined`; assert the parser stops at "Positions Value" (doesn't bleed into the transactions table).
+
+Commit: `feat(finance-tracker): add RevolutPdfImporter (current value, no cost basis)`
 
 ### Task 6.4: Import endpoint — `/api/import/upload` (preview)
 
@@ -1337,12 +1331,15 @@ Commit: `feat(finance-tracker): add /api/import/commit`
 
 ```ts
 it('upload→preview→commit→re-upload-same is 409', async () => {
-  const acc = await POST('/api/accounts', { source: 'trading212', label: 'T212 ISA' });
-  const f = new FormData(); f.append('file', new Blob([fs.readFileSync('fixtures/t212-sample.csv')]), 't212.csv'); f.append('accountId', acc.id);
+  const acc = await POST('/api/accounts', { source: 'trading212', label: 'T212 Invest' });
+  const f = new FormData();
+  f.append('file', new Blob([fs.readFileSync('fixtures/t212-positions-redacted.pdf')]), 't212.pdf');
+  f.append('accountId', acc.id);
   const preview = await POSTmulti('/api/import/upload', f);
   await POST('/api/import/commit', { previewId: preview.previewId });
   const holdings = await GET(`/api/holdings?accountId=${acc.id}`);
   expect(holdings.length).toBeGreaterThan(0);
+  expect(holdings[0].cost_basis).not.toBeNull(); // T212 carries cost basis
   const dup = await POSTmulti('/api/import/upload', f);
   expect(dup.status).toBe(409);
 });
@@ -1419,7 +1416,7 @@ Commits: `feat(finance-tracker): add /api/search`, `test(finance-tracker): searc
 
 ### Tasks
 
-- 11.1: `tiles/types.ts` + `tiles/registry.ts` + `tiles/usePortfolioData.ts` (TanStack Query joining `/api/holdings` + cached prices + symbol profiles + FX into a `Portfolio` object).
+- 11.1: `tiles/types.ts` + `tiles/registry.ts` + `tiles/usePortfolioData.ts` (TanStack Query joining `/api/holdings` + cached prices + symbol profiles + FX into a `Portfolio` object). **Spike 2 fix:** `cost_basis` is nullable. Portfolio-level return aggregates **only** positions with a non-null cost basis; the Summary strip shows total return over the covered subset with a footnote ("excludes N positions without cost data — e.g. Revolut"). Per-position P&L renders "—" when cost is absent. Add a fixture test with one cost-bearing (T212) + one cost-null (Revolut) position asserting the return excludes the latter and the footnote count is 1.
 - 11.2: `<Allocation />` — donut chart (ECharts) with tabs for sector/country/currency. **Spike 3 fix:** sector aggregation handles two cases — a `stock` contributes its full position value to its single `sector`; an `etf` distributes its position value across `sectorWeightings` (look-through). Holdings with no sector data (rare `other` type) go to an explicit **"Uncategorised"** bucket (reviewer fix I9). Geographic tab: ETFs lack clean country data from Yahoo, so they contribute to a **"Multiple/Diversified"** geo bucket rather than "Uncategorised" — documented as a v1 limitation, true geo look-through deferred to Phase 2. Test with a fixture portfolio mixing 2 stocks + 1 ETF, asserting the ETF's value is spread across sectors.
 - 11.3: `<Concentration />` — top 5 list with horizontal bars.
 - 11.4: `<DiversificationScore />` — **Reviewer fix (B4):** the design's composite `100 × (1 − cbrt(sector_HHI × geo_HHI × top5_share))` cubed two correlated signals (top5_share and HHI both measure top-position concentration). Replace top5_share with **Effective N** = `1 / overall_HHI` rendered as the headline, with sector / geo / currency HHI shown as three sub-scores beneath. Composite becomes optional. Add a fixture test asserting score values for canonical portfolios: single-position = 0, 2 equal = ~37, 5 equal = ~60, 50 equal = ~90. SVG circular progress for the headline.
@@ -1510,17 +1507,15 @@ Commits: `feat(finance-tracker): add /api/search`, `test(finance-tracker): searc
 
 ---
 
-## Validation spikes (do these *before* implementation starts)
+## Validation spikes
 
-These are listed in design doc §11. Each is < 1 hour and may invalidate assumptions:
+Results recorded in `docs/spikes/`. Status as of 2026-06-06:
 
-1. **Sample T212 export** — pull a real CSV from a live T212 account, eyeball columns.
-2. **Sample Revolut export** — generate a current statement, confirm `.xlsx` (not PDF).
-3. **Yahoo ticker resolution** — for ~20 likely tickers (AAPL, MSFT, ASML.AS, VWRL.L, IWDA.AS, BAS.DE, etc.) confirm `quoteSummary` returns sector + country + market cap.
-4. **ECB FX freshness** — schedule the daily endpoint at 16:30 Amsterdam for 3 days, confirm same-day data lands consistently.
-5. **PocketBase rule under realtime** — subscribe as user A, create a row for user B, confirm A doesn't see it.
-
-If any of these come back ugly, revisit the design before continuing.
+1. ✅ **T212 export** — DONE. Real statement is **PDF** (not CSV). "Open positions summary" table has ISIN + qty + average price (cost basis) + EUR value. GREEN. → `2026-06-06-spikes-1-2-results.md`
+2. 🟡 **Revolut export** — DONE. Real statement is **PDF**. "Portfolio breakdown" has ISIN + qty + current value but **no cost basis**. YELLOW → decided: import current value only. → `2026-06-06-spikes-1-2-results.md`
+3. 🟡 **Yahoo ticker resolution** — DONE. v3 API change + ETFs need `topHoldings` look-through. Both folded into the plan. → `2026-06-06-spikes-3-4-results.md`
+4. ✅ **ECB FX freshness** — DONE. Feed fresh, 29 currencies, structure matches parser. GREEN. → `2026-06-06-spikes-3-4-results.md`
+5. ⏳ **PocketBase rule under realtime** — PENDING (needs the workspace PB running). Instructions: `2026-06-06-manual-spikes-1-2-5.md`. This is the per-user privacy guarantee — run it as the first task of Milestone 1, block on GREEN.
 
 ---
 
@@ -1561,7 +1556,11 @@ M11 (tiles) and M15 (polish) were the worst-underestimated. Treat the original 1
 | Task 2.4 | **New** — per-UID rate limit middleware (60/min) | B3 |
 | Task 2.5 | **New** — Sentry init (no-op without DSN) | N4 |
 | Task 1.3 | **New** — PocketBase migration workflow doc + volume mount | B7 |
-| Task 6.0 | **New** — safe-xlsx parser harness (size/sheet/row caps, no formulas, `@e965/xlsx`) | B6 |
+| Task 6.0 | **New** — safe-pdf parser harness (size/page caps, timeout, no eval, `pdfjs-dist`); replaced the earlier safe-xlsx after spikes 1–2 showed both brokers export PDF | B6 + spikes 1–2 |
+| Tasks 6.2/6.3 | Rewritten as `Trading212PdfImporter` / `RevolutPdfImporter` (PDF table extraction); Revolut imports with null cost basis | spikes 1–2 |
+| Task 3.2 | YahooPriceProvider rewritten for v3 `new YahooFinance()` + ETF `topHoldings` sector look-through | spike 3 |
+| `symbol_profiles` / `SymbolProfile` | Added `assetType` + `sectorWeightings` for ETF allocation look-through | spike 3 |
+| `holdings` | `cost_basis` + `cost_currency` made nullable | spike 2 |
 | Task 6.4 | Documented in-memory preview cache limitation + sensible error message | I13 |
 | Task 8.6 | **New** — `holdings_snapshot` pruning cron (keep weekly after 90d) | I8 |
 | Task 9.5 | **New** — i18n `format.ts` utility (Intl.NumberFormat) | N5 |
