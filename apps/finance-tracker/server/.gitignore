@@ -1,0 +1,3 @@
+# Local PocketBase dev binary + data (never commit — see pb-schema/README.md)
+.pb/
+pb_data/
