@@ -16,7 +16,7 @@
 
 | # | Milestone | Depends on | Done when |
 |---|---|---|---|
-| 0 | Workspace scaffolding | — | `pnpm --filter finance-tracker dev` serves a blank PWA on :5174 and BFF on :3110 |
+| 0 | Workspace scaffolding | — | `pnpm --filter finance-tracker dev` serves a blank PWA on :5173 and BFF on :3110 |
 | 1 | PocketBase schema | — (can parallel with M0) | All 8 collections + rules exist; smoke test reads each |
 | 2 | BFF: auth middleware + health | 0, 1 | `GET /api/auth/me` returns user info for a valid Firebase ID token; 401 otherwise |
 | 3 | External providers (Yahoo + Finnhub + ECB) | 0 | Unit tests pass for each provider against fixture responses; live smoke test caches one ticker |
@@ -47,6 +47,8 @@
 - **Commit cadence:** one commit per task. Conventional Commits: `feat(finance-tracker): ...`, `test(finance-tracker): ...`, `chore(finance-tracker): ...`.
 - **All paths** are relative to `auth-workspace/`.
 - **Reference existing apps** for stylistic patterns: `apps/dutch-app/` for Tailwind + TS conventions; `apps/habit-tracker/` for PocketBase usage patterns (especially `src/lib/pb.js` and `src/hooks/useHabits.js`).
+- **`c.var.pbUserId` is the only correct identifier for per-user PocketBase queries.** Never use `c.var.uid` (Firebase UID) directly in PB filters — repos and route handlers must filter by `user = pbUserId`. Drilled into reviewers as a code-review checklist item.
+- **Cost basis methodology: weighted average cost.** When a user adds a position they already hold, new `cost_basis = (existing_cost + new_cost) / (existing_qty + new_qty)` × new_qty (stored as totals). On partial sell, `cost_basis` is reduced proportionally to the sold quantity. No FIFO/LIFO/tax-lot accounting in v1.
 
 ---
 
@@ -126,7 +128,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 5174, host: true },
+  server: { port: 5173, host: true },   // matches design §9 CORS allowlist (reviewer fix I10)
 });
 ```
 
@@ -135,7 +137,7 @@ export default defineConfig({
 ```bash
 pnpm install
 pnpm --filter web dev
-# → expect "Local: http://localhost:5174"
+# → expect "Local: http://localhost:5173"
 ```
 
 **Step 4 — Commit**
@@ -224,7 +226,7 @@ git commit -m "feat(finance-tracker): scaffold Hono BFF with /health endpoint"
 ```bash
 cd auth-workspace
 pnpm --filter finance-tracker dev
-# expect both web (5174) and server (3110) to start
+# expect both web (5173) and server (3110) to start
 ```
 
 **Step 2 — Commit if any tweaks needed**
@@ -265,12 +267,16 @@ WORKDIR /app
 COPY --from=web-builder /app .
 RUN pnpm --filter finance-tracker-server build
 
-# Stage 3: runtime
+# Stage 3: runtime (production deps only — reviewer fix N7)
 FROM node:24-alpine
 WORKDIR /app
+RUN corepack enable
 COPY --from=server-builder /app/apps/finance-tracker/server/dist ./server
 COPY --from=web-builder /app/apps/finance-tracker/web/dist ./web
-COPY --from=server-builder /app/node_modules ./node_modules
+COPY --from=server-builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY --from=server-builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=server-builder /app/apps/finance-tracker/server/package.json ./server/package.json
+RUN cd server && pnpm install --prod --frozen-lockfile --ignore-scripts
 EXPOSE 80
 ENV PORT=80
 CMD ["node", "server/index.js"]
@@ -381,7 +387,56 @@ git add apps/finance-tracker/server/pb-schema/shared.json
 git commit -m "feat(finance-tracker): add shared PocketBase collections"
 ```
 
-### Task 1.3: Verify rules with a smoke test
+### Task 1.3: Migration runner (apply schema to prod)
+
+**Reviewer fix (B7):** the original plan exported schema as JSON for git but had no story for applying it to production. Filling the gap.
+
+**Files:**
+- Create: `apps/finance-tracker/server/pb-schema/apply.ts`
+- Create: `apps/finance-tracker/server/pb-schema/README.md`
+
+**Approach:** use PocketBase's official **JS migrations** (in `pb_migrations/`), not "import the JSON from the admin UI". For each schema change:
+
+1. Make the change in the local PocketBase admin UI.
+2. From the admin UI, generate a migration file: Settings → Migrations → Create migration.
+3. Commit the resulting `pb_migrations/*.js` file alongside our code.
+4. On container boot, PocketBase auto-applies any new migrations.
+
+**Step 1 — Document the workflow**
+
+```markdown
+# pb-schema/README.md
+
+Migrations are PocketBase JS migration files committed under
+`apps/finance-tracker/server/pb-schema/migrations/`. On every container
+boot, PocketBase auto-applies any pending migrations from this directory.
+
+## Creating a new migration
+1. Make schema change in the local admin UI (http://localhost:8090/_/).
+2. Settings → Migrations → "Take snapshot" → name it descriptively.
+3. Move the generated file from your local PB instance into
+   `apps/finance-tracker/server/pb-schema/migrations/` and commit.
+
+## Applying in prod
+The Mac Mini PocketBase container mounts our `migrations/` directory.
+Migrations apply in lexicographic order on boot.
+```
+
+**Step 2 — Update docker-compose to mount migrations directory** (modify M0.5)
+
+```yaml
+volumes:
+  - ./pb-schema/migrations:/pb/pb_migrations:ro
+```
+
+**Step 3 — Commit**
+
+```bash
+git add apps/finance-tracker/server/pb-schema/README.md apps/finance-tracker/docker-compose.yml
+git commit -m "feat(finance-tracker): document PocketBase migration workflow"
+```
+
+### Task 1.4: Verify rules with a smoke test
 
 **Files:**
 - Create: `apps/finance-tracker/server/tests/pb-rules.test.ts`
@@ -449,43 +504,96 @@ Commit: `chore(finance-tracker): wire Firebase Admin SDK`
 
 ### Task 2.2: PocketBase admin client
 
+**Reviewer fix (B2):** the original sketch shared a single PocketBase instance across all requests, racing on `authStore` under concurrent writes. Replaced with a per-call fresh client backed by a long-lived admin **impersonation token** loaded from `PB_ADMIN_TOKEN` at boot. If `PB_ADMIN_TOKEN` is absent, fall back to email/password and log a startup warning.
+
 **Files:**
 - Create: `apps/finance-tracker/server/src/lib/pb.ts`
+- Create: `apps/finance-tracker/server/tests/lib/pb.test.ts`
 
 ```ts
+// src/lib/pb.ts
 import PocketBase from 'pocketbase';
 
-const pb = new PocketBase(process.env.PB_URL);
+const ADMIN_TOKEN = process.env.PB_ADMIN_TOKEN;
+const ADMIN_EMAIL = process.env.PB_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.PB_ADMIN_PASSWORD;
+const PB_URL = process.env.PB_URL!;
 
+if (!ADMIN_TOKEN && !(ADMIN_EMAIL && ADMIN_PASSWORD)) {
+  throw new Error('Set PB_ADMIN_TOKEN, or PB_ADMIN_EMAIL+PB_ADMIN_PASSWORD');
+}
+if (!ADMIN_TOKEN) {
+  console.warn('PB_ADMIN_TOKEN not set — falling back to admin email/password. Issue a long-lived token in prod.');
+}
+
+/** Returns a fresh PB client per call. Never share authStore across requests. */
 export async function pbAdmin(): Promise<PocketBase> {
-  if (!pb.authStore.isValid) {
-    await pb.admins.authWithPassword(process.env.PB_ADMIN_EMAIL!, process.env.PB_ADMIN_PASSWORD!);
+  const pb = new PocketBase(PB_URL);
+  if (ADMIN_TOKEN) {
+    pb.authStore.save(ADMIN_TOKEN, null);
+    return pb;
   }
+  await pb.admins.authWithPassword(ADMIN_EMAIL!, ADMIN_PASSWORD!);
   return pb;
 }
 ```
 
-Commit: `chore(finance-tracker): add PocketBase admin client`
+**Test (token wiring):**
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { pbAdmin } from '../../src/lib/pb';
+
+describe('pbAdmin', () => {
+  it('returns a new instance per call (no shared authStore)', async () => {
+    const a = await pbAdmin();
+    const b = await pbAdmin();
+    expect(a).not.toBe(b);
+  });
+
+  it('authenticates the returned client', async () => {
+    const pb = await pbAdmin();
+    expect(pb.authStore.isValid).toBe(true);
+  });
+});
+```
+
+Commit: `chore(finance-tracker): add PocketBase admin client (token-based, no shared authStore)`
 
 ### Task 2.3: Auth middleware + /api/auth/me
 
+**Reviewer fixes:**
+- **B1a:** `passwordConfirm` must equal `password` (the original sketch sent `''`, which would reject 100% of new sign-ins).
+- **B1b:** add an LRU cache keyed by Firebase UID → PB user ID so we don't hit PocketBase on every authed request (was a wasted roundtrip per request).
+- **I6:** add an explicit test where `verifyIdToken` *throws*, asserting the middleware returns 401. The original test mocked `verifyIdToken` to always succeed, so any implementation (even one that skipped verification entirely) would have passed.
+
 **Files:**
 - Create: `apps/finance-tracker/server/src/middleware/auth.ts`
+- Create: `apps/finance-tracker/server/src/lib/uidCache.ts`
 - Create: `apps/finance-tracker/server/src/routes/auth.ts`
 - Modify: `apps/finance-tracker/server/src/index.ts`
 - Create: `apps/finance-tracker/server/tests/auth.test.ts`
 
-**Step 1 — Test first**
+**Step 1 — Test first (now with three cases)**
 
 ```ts
 // tests/auth.test.ts
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { authMiddleware } from '../src/middleware/auth';
 
-vi.mock('../src/lib/firebase', () => ({
-  firebaseAuth: { verifyIdToken: vi.fn().mockResolvedValue({ uid: 'fb-uid-123', email: 'a@test' }) },
+const verifyIdToken = vi.fn();
+vi.mock('../src/lib/firebase', () => ({ firebaseAuth: { verifyIdToken: (...a: any[]) => verifyIdToken(...a) } }));
+vi.mock('../src/lib/pb', () => ({
+  pbAdmin: vi.fn().mockResolvedValue({
+    collection: () => ({
+      getFirstListItem: vi.fn().mockRejectedValue(new Error('not found')),
+      create: vi.fn().mockResolvedValue({ id: 'pb-id-1' }),
+    }),
+  }),
 }));
+
+beforeEach(() => verifyIdToken.mockReset());
 
 describe('auth middleware', () => {
   it('401 when no Authorization header', async () => {
@@ -494,49 +602,80 @@ describe('auth middleware', () => {
     expect(res.status).toBe(401);
   });
 
-  it('passes with valid token, sets c.var.uid', async () => {
-    const app = new Hono().use('/api/*', authMiddleware).get('/api/x', (c) => c.json({ uid: c.var.uid }));
-    const res = await app.request('/api/x', { headers: { Authorization: 'Bearer faketoken' } });
+  it('401 when token verification throws', async () => {
+    verifyIdToken.mockRejectedValue(new Error('Firebase: invalid signature'));
+    const app = new Hono().use('/api/*', authMiddleware).get('/api/x', (c) => c.text('ok'));
+    const res = await app.request('/api/x', { headers: { Authorization: 'Bearer bad' } });
+    expect(res.status).toBe(401);
+  });
+
+  it('passes with valid token, sets c.var.uid + c.var.pbUserId', async () => {
+    verifyIdToken.mockResolvedValue({ uid: 'fb-uid-123', email: 'a@test' });
+    const app = new Hono().use('/api/*', authMiddleware)
+      .get('/api/x', (c) => c.json({ uid: c.var.uid, pbUserId: c.var.pbUserId }));
+    const res = await app.request('/api/x', { headers: { Authorization: 'Bearer good' } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ uid: 'fb-uid-123' });
+    expect(await res.json()).toEqual({ uid: 'fb-uid-123', pbUserId: 'pb-id-1' });
   });
 });
 ```
 
-**Step 2 — Implement**
+**Step 2 — Implement (with LRU cache + fixed passwordConfirm)**
+
+```ts
+// src/lib/uidCache.ts
+import { LRUCache } from 'lru-cache';
+export const uidToPbId = new LRUCache<string, string>({ max: 1000, ttl: 1000 * 60 * 60 });
+```
 
 ```ts
 // src/middleware/auth.ts
 import { createMiddleware } from 'hono/factory';
 import { firebaseAuth } from '../lib/firebase';
 import { pbAdmin } from '../lib/pb';
+import { uidToPbId } from '../lib/uidCache';
 
 export const authMiddleware = createMiddleware<{
   Variables: { uid: string; email: string; pbUserId: string };
 }>(async (c, next) => {
   const auth = c.req.header('Authorization');
   if (!auth?.startsWith('Bearer ')) return c.json({ error: 'unauthorized' }, 401);
+
+  let decoded;
   try {
-    const decoded = await firebaseAuth.verifyIdToken(auth.slice(7));
-    c.set('uid', decoded.uid);
-    c.set('email', decoded.email!);
-    // upsert PocketBase user
-    const pb = await pbAdmin();
-    const pbUser = await pb.collection('users').getFirstListItem(`firebase_uid="${decoded.uid}"`).catch(() => null);
-    const pbUserId = pbUser?.id || (await pb.collection('users').create({
-      firebase_uid: decoded.uid,
-      email: decoded.email,
-      emailVisibility: false,
-      password: crypto.randomUUID(),
-      passwordConfirm: '',
-    })).id;
-    c.set('pbUserId', pbUserId);
-    await next();
-  } catch (e) {
+    decoded = await firebaseAuth.verifyIdToken(auth.slice(7));
+  } catch {
     return c.json({ error: 'invalid token' }, 401);
   }
+
+  c.set('uid', decoded.uid);
+  c.set('email', decoded.email ?? '');
+
+  let pbUserId = uidToPbId.get(decoded.uid);
+  if (!pbUserId) {
+    const pb = await pbAdmin();
+    const existing = await pb.collection('users').getFirstListItem(`firebase_uid="${decoded.uid}"`).catch(() => null);
+    if (existing) {
+      pbUserId = existing.id;
+    } else {
+      const password = crypto.randomUUID();
+      const created = await pb.collection('users').create({
+        firebase_uid: decoded.uid,
+        email: decoded.email,
+        emailVisibility: false,
+        password,
+        passwordConfirm: password,   // ← reviewer fix B1a
+      });
+      pbUserId = created.id;
+    }
+    uidToPbId.set(decoded.uid, pbUserId);   // ← reviewer fix B1b
+  }
+  c.set('pbUserId', pbUserId);
+  await next();
 });
 ```
+
+**Auth-collection design decision (closes design §13 open item):** we use PocketBase's `users` auth collection with `firebase_uid` as an indexed field (not the PB primary key). PB's `id` stays auto-generated. The cache is keyed on `firebase_uid → pb_id`. This is simpler than custom-keying the PB record and avoids edge cases where Firebase UIDs change format.
 
 **Step 3 — Wire route + run tests**
 
@@ -565,11 +704,111 @@ pnpm --filter finance-tracker-server test
 
 ```bash
 git add apps/finance-tracker/server/src/middleware/auth.ts \
+        apps/finance-tracker/server/src/lib/uidCache.ts \
         apps/finance-tracker/server/src/routes/auth.ts \
         apps/finance-tracker/server/src/index.ts \
         apps/finance-tracker/server/tests/auth.test.ts
 git commit -m "feat(finance-tracker): add Firebase auth middleware + /api/auth/me"
 ```
+
+### Task 2.4: Per-UID rate limiting
+
+**Reviewer fix (B3):** rate limiting promised in the design (§9: "per-Firebase-UID, 60 req/min on /api/*") had no corresponding plan task. Adding it explicitly.
+
+**Files:**
+- Create: `apps/finance-tracker/server/src/middleware/rateLimit.ts`
+- Modify: `apps/finance-tracker/server/src/index.ts`
+- Create: `apps/finance-tracker/server/tests/rateLimit.test.ts`
+
+**Step 1 — Test**
+
+```ts
+import { describe, it, expect, vi } from 'vitest';
+import { Hono } from 'hono';
+import { rateLimit } from '../src/middleware/rateLimit';
+
+describe('rateLimit', () => {
+  it('returns 429 after limit', async () => {
+    const app = new Hono().use('/api/*', rateLimit({ limit: 3, windowMs: 60_000, keyFn: () => 'uid-1' }))
+      .get('/api/x', (c) => c.text('ok'));
+    for (let i = 0; i < 3; i++) {
+      const r = await app.request('/api/x');
+      expect(r.status).toBe(200);
+    }
+    const blocked = await app.request('/api/x');
+    expect(blocked.status).toBe(429);
+  });
+
+  it('keys per-UID — different UIDs share no counter', async () => {
+    let uid = 'a';
+    const app = new Hono().use('/api/*', rateLimit({ limit: 1, windowMs: 60_000, keyFn: () => uid }))
+      .get('/api/x', (c) => c.text('ok'));
+    expect((await app.request('/api/x')).status).toBe(200);
+    expect((await app.request('/api/x')).status).toBe(429); // a blocked
+    uid = 'b';
+    expect((await app.request('/api/x')).status).toBe(200); // b fresh
+  });
+});
+```
+
+**Step 2 — Implement (token-bucket via LRU)**
+
+```ts
+// src/middleware/rateLimit.ts
+import { createMiddleware } from 'hono/factory';
+import { LRUCache } from 'lru-cache';
+
+type Opts = { limit: number; windowMs: number; keyFn: (c: any) => string };
+
+export function rateLimit(opts: Opts) {
+  const cache = new LRUCache<string, { count: number; resetAt: number }>({ max: 10_000, ttl: opts.windowMs });
+  return createMiddleware(async (c, next) => {
+    const key = opts.keyFn(c);
+    const now = Date.now();
+    const entry = cache.get(key);
+    if (!entry || entry.resetAt < now) {
+      cache.set(key, { count: 1, resetAt: now + opts.windowMs });
+    } else {
+      entry.count++;
+      if (entry.count > opts.limit) {
+        c.header('Retry-After', String(Math.ceil((entry.resetAt - now) / 1000)));
+        return c.json({ error: 'rate_limited' }, 429);
+      }
+    }
+    await next();
+  });
+}
+```
+
+**Step 3 — Wire it in (after auth middleware so we have a UID to key on)**
+
+```ts
+// src/index.ts
+app.use('/api/*', authMiddleware);
+app.use('/api/*', rateLimit({ limit: 60, windowMs: 60_000, keyFn: (c) => c.var.uid }));
+```
+
+**Step 4 — Commit**
+
+```bash
+git add apps/finance-tracker/server/src/middleware/rateLimit.ts \
+        apps/finance-tracker/server/tests/rateLimit.test.ts \
+        apps/finance-tracker/server/src/index.ts
+git commit -m "feat(finance-tracker): add per-UID rate limit middleware (60/min)"
+```
+
+### Task 2.5: Error tracking (Sentry)
+
+**Reviewer fix (N4):** no observability story anywhere in the plan. Adding the cheapest possible version: Sentry init in both web and server, with `SENTRY_DSN` env var. Skipped when unset (local dev).
+
+**Files:**
+- Modify: `apps/finance-tracker/server/src/index.ts` — `import * as Sentry from '@sentry/node'; if (process.env.SENTRY_DSN) Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });`
+- Modify: `apps/finance-tracker/web/src/main.tsx` — Sentry browser init guarded by `import.meta.env.VITE_SENTRY_DSN`.
+- Modify: `apps/finance-tracker/server/src/middleware/errorHandler.ts` — Hono `onError` calls `Sentry.captureException`.
+
+Test: throw inside a route, assert Sentry mock was called.
+
+Commit: `feat(finance-tracker): wire Sentry error tracking (no-op without DSN)`
 
 ---
 
@@ -762,15 +1001,23 @@ Commit: `feat(finance-tracker): add FinnhubPriceProvider`
 - Create: `apps/finance-tracker/server/tests/fixtures/ecb-eurofxref-daily.xml`
 
 ```ts
+// Reviewer fix N8: use fast-xml-parser instead of fragile regex
+import { XMLParser } from 'fast-xml-parser';
+
 export class EcbFxProvider implements FxProvider {
   name = 'ecb' as const;
+  private parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '' });
 
   async latest(): Promise<Record<string, number>> {
     const r = await fetch('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml');
+    if (!r.ok) throw new Error(`ECB FX fetch failed: ${r.status}`);
     const xml = await r.text();
+    const doc = this.parser.parse(xml);
+    const cubes = doc?.['gesmes:Envelope']?.Cube?.Cube?.Cube ?? [];
+    const list = Array.isArray(cubes) ? cubes : [cubes];
     const rates: Record<string, number> = { EUR: 1 };
-    for (const m of xml.matchAll(/currency='([A-Z]+)' rate='([\d.]+)'/g)) {
-      rates[m[1]] = parseFloat(m[2]);
+    for (const c of list) {
+      if (c.currency && c.rate) rates[c.currency] = parseFloat(c.rate);
     }
     return rates;
   }
@@ -905,6 +1152,87 @@ Commit: `test(finance-tracker): e2e portfolio lifecycle`
 
 **Goal:** Trading 212 CSV + Revolut XLSX parse to `ParsedStatement`; import endpoint roundtrips with preview/commit semantics.
 
+### Task 6.0: Excel parsing safety harness
+
+**Reviewer fix (B6):** SheetJS (`xlsx`) on user-uploaded files is a known security surface — historical CVEs around prototype pollution, formula injection, and zip-bomb DoS. Mitigations before any importer code lands.
+
+**Files:**
+- Modify: `apps/finance-tracker/server/package.json` — pin a vetted xlsx source
+- Create: `apps/finance-tracker/server/src/importers/safe-xlsx.ts`
+- Create: `apps/finance-tracker/server/tests/importers/safe-xlsx.test.ts`
+
+**Step 1 — Pin the dep**
+
+Use `@e965/xlsx` (community-maintained drop-in) or the official paid CDN — *not* the npm `xlsx` package. Add to deps:
+```json
+"@e965/xlsx": "^0.20.0"
+```
+
+**Step 2 — Implement a single chokepoint for parsing**
+
+```ts
+// src/importers/safe-xlsx.ts
+import * as XLSX from '@e965/xlsx';
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024;   // 10 MB
+const MAX_SHEETS = 20;
+const MAX_ROWS_PER_SHEET = 10_000;
+
+export class XlsxParseError extends Error { constructor(msg: string) { super(msg); this.name = 'XlsxParseError'; } }
+
+export function parseXlsxSafely(buffer: Buffer): XLSX.WorkBook {
+  if (buffer.length > MAX_FILE_BYTES) {
+    throw new XlsxParseError(`file too large: ${buffer.length} > ${MAX_FILE_BYTES}`);
+  }
+  const wb = XLSX.read(buffer, {
+    type: 'buffer',
+    cellFormula: false,    // disable formula evaluation
+    cellHTML: false,       // disable HTML interpretation
+    sheetStubs: false,
+    bookVBA: false,
+  });
+  if (wb.SheetNames.length > MAX_SHEETS) {
+    throw new XlsxParseError(`too many sheets: ${wb.SheetNames.length}`);
+  }
+  for (const name of wb.SheetNames) {
+    const sheet = wb.Sheets[name];
+    const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+    if (range.e.r - range.s.r > MAX_ROWS_PER_SHEET) {
+      throw new XlsxParseError(`sheet "${name}" exceeds ${MAX_ROWS_PER_SHEET} rows`);
+    }
+  }
+  return wb;
+}
+```
+
+**Step 3 — Tests**
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { parseXlsxSafely, XlsxParseError } from '../../src/importers/safe-xlsx';
+
+describe('parseXlsxSafely', () => {
+  it('rejects oversize files', () => {
+    expect(() => parseXlsxSafely(Buffer.alloc(11 * 1024 * 1024))).toThrow(XlsxParseError);
+  });
+  it('rejects non-xlsx garbage', () => {
+    expect(() => parseXlsxSafely(Buffer.from('not a real xlsx'))).toThrow();
+  });
+  // load a fixture xlsx with a formula cell, parse, assert no formula execution
+});
+```
+
+**Step 4 — Commit**
+
+```bash
+git add apps/finance-tracker/server/src/importers/safe-xlsx.ts \
+        apps/finance-tracker/server/tests/importers/safe-xlsx.test.ts \
+        apps/finance-tracker/server/package.json
+git commit -m "feat(finance-tracker): xlsx parse safety harness (size/sheet/row caps, no formulas)"
+```
+
+All XLSX parsing throughout the app **must** go through `parseXlsxSafely()`. Lint rule (M0): a custom ESLint rule or grep-based pre-commit check that blocks raw `XLSX.read(` imports outside `safe-xlsx.ts`.
+
 ### Task 6.1: StatementImporter interface + ISIN→ticker resolution helper
 
 Create `server/src/importers/types.ts` (interface from design §6).
@@ -960,6 +1288,8 @@ POST /api/import/upload  (multipart/form-data)
 ```
 
 Store the parsed result in a short-lived cache (in-memory map keyed by `previewId`, 10-min TTL) so commit can pick it up without re-parsing.
+
+**Reviewer note (I13):** the preview cache lives in process memory. If the BFF restarts between upload and commit, the user re-uploads. Acceptable for v1 (single-instance deploy on the Mac Mini), but **document this limitation in the route handler** with a comment, and add `previewId` expiry in the error message: `"preview expired or not found"` (not `"invalid previewId"`) so the UI can prompt re-upload sensibly.
 
 Commit: `feat(finance-tracker): add /api/import/upload (preview)`
 
@@ -1021,9 +1351,10 @@ Commits: `feat(finance-tracker): add /api/search`, `test(finance-tracker): searc
 - 8.3: `refreshFx.ts` — call ECB, upsert `fx_rates` by today's date. Idempotent re-run.
 - 8.4: `snapshotHoldings.ts` — for every account, for every holding, insert `holdings_snapshot{date: today}`. Skip if today's row already exists for that holding.
 - 8.5: `refreshProfiles.ts` — find `symbol_profiles` with `last_refreshed_at < now - 7d`, refresh.
-- 8.6: E2E test using `vi.useFakeTimers()` — advance to 09:00 Mon Amsterdam time, assert refreshPrices was called.
+- 8.6: **Reviewer fix (I8) — `pruneSnapshots.ts`.** Weekly cron: collapse `holdings_snapshot` rows older than 90 days to one-per-week-per-holding (keep Sundays, delete the rest). Without pruning, 50 holdings × 365 days × 100 users = 1.8M rows/year. With pruning, that drops by ~85% past the 90-day window while preserving the time series for Phase 2 charts. Test asserts: weekday rows older than 90d removed; Sunday rows older than 90d retained; rows newer than 90d untouched.
+- 8.7: E2E test using `vi.useFakeTimers()` — advance to 09:00 Mon Amsterdam time, assert refreshPrices was called.
 
-6 commits.
+7 commits.
 
 ---
 
@@ -1037,9 +1368,10 @@ Commits: `feat(finance-tracker): add /api/search`, `test(finance-tracker): searc
 - 9.2: Install shadcn/ui (CLI: `npx shadcn-ui@latest init`). Add components: button, sheet, dialog, dropdown-menu, command, skeleton, toast.
 - 9.3: Theme provider hook: reads `localStorage('theme')` with `prefers-color-scheme` fallback; applies `data-theme` attribute to `<html>`. `<ThemeToggle />` cycles light/dark/system.
 - 9.4: Layout components — `<HeroStrip />`, `<AccountTabs />`, `<TileGrid />`, `<BottomTabBar />`, `<FabMenu />`. Render with placeholder data.
-- 9.5: Storybook-style visual smoke at `/dev/layout` showing both modes side-by-side.
+- 9.5: **Reviewer fix (N5) — i18n / formatting utility.** `src/lib/format.ts` exposes `formatEur(n)`, `formatPct(n)`, `formatDate(d)`, `formatQty(n)` using `Intl.NumberFormat` with locale `nl-NL`. Never let `.toFixed(2)` appear in component code. Unit test for each helper with edge cases (negative, very large, very small).
+- 9.6: Storybook-style visual smoke at `/dev/layout` showing both modes side-by-side.
 
-5 commits.
+6 commits.
 
 ---
 
@@ -1065,9 +1397,9 @@ Commits: `feat(finance-tracker): add /api/search`, `test(finance-tracker): searc
 - 11.1: `tiles/types.ts` + `tiles/registry.ts` + `tiles/usePortfolioData.ts` (TanStack Query joining `/api/holdings` + cached prices + symbol profiles + FX into a `Portfolio` object).
 - 11.2: `<Allocation />` — donut chart (ECharts) with tabs for sector/country/currency.
 - 11.3: `<Concentration />` — top 5 list with horizontal bars.
-- 11.4: `<DiversificationScore />` — composite headline + 3 sub-scores; SVG circular progress (no chart lib needed).
+- 11.4: `<DiversificationScore />` — **Reviewer fix (B4):** the design's composite `100 × (1 − cbrt(sector_HHI × geo_HHI × top5_share))` cubed two correlated signals (top5_share and HHI both measure top-position concentration). Replace top5_share with **Effective N** = `1 / overall_HHI` rendered as the headline, with sector / geo / currency HHI shown as three sub-scores beneath. Composite becomes optional. Add a fixture test asserting score values for canonical portfolios: single-position = 0, 2 equal = ~37, 5 equal = ~60, 50 equal = ~90. SVG circular progress for the headline.
 - 11.5: `<Income />` — weighted yield + expected annual.
-- 11.6: `<Quality />` — weighted P/E + weighted beta with one-line interpretation.
+- 11.6: `<Quality />` — weighted P/E + weighted beta with one-line interpretation. **Reviewer fix (I11):** the harmonic mean for P/E is undefined when any constituent P/E ≤ 0 (loss-making companies). Exclude those positions from the calculation and show a banner: *"Quality excludes N loss-making positions (M% of portfolio)."* Test asserts the exclusion math.
 - 11.7: `<Treemap />` — full-width ECharts treemap, sized by value, coloured by P&L %.
 - 11.8: Each tile gets a Vitest behaviour test against a fixture portfolio: `render(<Tile />, { wrapper: TestQueryProvider }); expect(screen.getByText(...))`.
 
@@ -1176,6 +1508,49 @@ If any of these come back ugly, revisit the design before continuing.
 | PocketBase realtime leaks across users | Smoke test in M1.3 catches the most common rule mistake; explicit double-filtering in the data access layer (filter by `user = pbUserId` even though rule enforces it). |
 | Cron jobs miss a tick under fake-timer tests but pass in prod (or vice versa) | M8.6 forces fake-timer test; smoke-deploy the cron container with a 5-minute fake schedule to verify wiring. |
 | Treemap with 100+ positions becomes unreadable | ECharts treemap supports drill-down; group small slices into "Other" with a click to expand. Implement in M11.7 from day one. |
+
+---
+
+## Effort estimate (revised after independent review)
+
+**Plan claims:** ~110 tasks at ~30 min each → 55 hours. **Reviewer's reality check:**
+
+| Block | Plan estimate | Realistic (one engineer) |
+|---|---|---|
+| M0–M4 (scaffolding + PB + auth + providers + DAL) | ~12h | ~30h |
+| M5–M8 (CRUD + import + search + cron) | ~12h | ~35h |
+| M9–M14 (frontend tiles + flows) | ~17h | ~80h |
+| M15 (polish) | ~5h | ~25h |
+| M16 (deploy + cron monitoring) | ~3h | ~12h |
+| **Total** | **~55h** | **~180h (≈8–10 weeks part-time)** |
+
+M11 (tiles) and M15 (polish) were the worst-underestimated. Treat the original 1-bullet-per-tile cadence as wishful thinking; budget 3–5 commits per Phase 1 tile in practice.
+
+## Plan revisions (2026-06-06, after independent review)
+
+| Ref | Change | Issue addressed |
+|---|---|---|
+| Conventions | Added `c.var.pbUserId` vs `c.var.uid` rule; cost-basis methodology (weighted-average) | I7, B5 |
+| Task 2.2 | PB admin client uses token (not email/password), no shared authStore | B2 |
+| Task 2.3 | Fixed `passwordConfirm` bug; LRU cache UID→pbUserId; added 401-on-token-throw test; closed design §13 auth choice | B1, I6 |
+| Task 2.4 | **New** — per-UID rate limit middleware (60/min) | B3 |
+| Task 2.5 | **New** — Sentry init (no-op without DSN) | N4 |
+| Task 1.3 | **New** — PocketBase migration workflow doc + volume mount | B7 |
+| Task 6.0 | **New** — safe-xlsx parser harness (size/sheet/row caps, no formulas, `@e965/xlsx`) | B6 |
+| Task 6.4 | Documented in-memory preview cache limitation + sensible error message | I13 |
+| Task 8.6 | **New** — `holdings_snapshot` pruning cron (keep weekly after 90d) | I8 |
+| Task 9.5 | **New** — i18n `format.ts` utility (Intl.NumberFormat) | N5 |
+| Task 11.4 | Diversification: Effective N + sub-scores replaces correlated cbrt composite; fixture-based test | B4 |
+| Task 11.6 | Quality tile excludes negative P/E with explicit banner | I11 |
+| Task 0.5 | Dockerfile runtime stage uses `pnpm install --prod` (no dev deps) | N7 |
+| Task 3.4 | ECB parser uses `fast-xml-parser` (no fragile regex) | N8 |
+| Vite config | Port 5173 (matches design §9 CORS allowlist) | I10 |
+
+**Known-issues deferred** (acceptable risk, not blocking):
+- I4 — shared-collection enumeration via PB list endpoint. Mitigated by PB not having a host port in production; smoke test in M16 confirms.
+- I5 — integration tests labelled as unit tests. To be addressed during the M4 DAL build (testcontainers spin-up).
+- I9 — Yahoo partial-data → `"Uncategorised"` bucket. Implementation detail in M11.2.
+- I14 — service worker + auth header strategy. Address during M15.8 with Workbox `NetworkFirst` + auth-stripped cache keys.
 
 ---
 
