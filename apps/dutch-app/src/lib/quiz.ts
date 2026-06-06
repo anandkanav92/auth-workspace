@@ -5,7 +5,7 @@ export interface QuizResult {
   passed: boolean;
 }
 
-const PASS_THRESHOLD = 60;
+export const PASS_THRESHOLD = 60;
 
 export function scoreQuiz(correct: number, total: number): QuizResult {
   const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;

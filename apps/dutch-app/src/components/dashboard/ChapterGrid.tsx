@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { chapters } from "@/data/chapters";
 import { useStorage } from "@/hooks/useStorage";
+import { PASS_THRESHOLD } from "@/lib/quiz";
 import type { ChapterProgress } from "@/lib/storage";
 
 export function ChapterGrid() {
@@ -50,7 +51,11 @@ export function ChapterGrid() {
   return (
     <div className="grid grid-cols-3 gap-4">
       {chapters.map((ch) => {
-        const pct = getCompletionPercent(progress[ch.id]);
+        const cp = progress[ch.id];
+        const pct = getCompletionPercent(cp);
+        const quizAttempted = !!cp?.exercisesDone;
+        const quizScore = cp?.quizBestScore ?? 0;
+        const quizPassed = quizScore >= PASS_THRESHOLD;
         return (
           <Link
             key={ch.id}
@@ -70,7 +75,20 @@ export function ChapterGrid() {
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <p className="text-xs text-gray-400 mt-1">{pct}% complete</p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs text-gray-400">{pct}% complete</p>
+              {quizAttempted ? (
+                <span
+                  className={`text-[11px] font-semibold ${
+                    quizPassed ? "text-green-600" : "text-amber-600"
+                  }`}
+                >
+                  🎯 {quizScore}%{quizPassed ? " ✓" : ""}
+                </span>
+              ) : (
+                <span className="text-[11px] text-gray-300">🎯 —</span>
+              )}
+            </div>
           </Link>
         );
       })}
