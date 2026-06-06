@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests",
+    "test:integration": "NODE_OPTIONS=--experimental-eventsource vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "hono": "^4.0.0",
