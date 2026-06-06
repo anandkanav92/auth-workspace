@@ -5,6 +5,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { authMiddleware } from './middleware/auth';
+import { rateLimit } from './middleware/rateLimit';
 import { authRoutes } from './routes/auth';
 
 const app = new Hono();
@@ -13,8 +14,10 @@ app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
 
 // --- API routes (MUST be registered ABOVE the SPA fallback below) ----------
 // Every /api/* request requires a valid Firebase ID token; authMiddleware sets
-// c.var.uid / email / pbUserId for downstream handlers.
+// c.var.uid / email / pbUserId for downstream handlers. Rate limiting runs
+// AFTER auth so we have a UID to key the per-user budget on (60 req/min).
 app.use('/api/*', authMiddleware);
+app.use('/api/*', rateLimit({ limit: 60, windowMs: 60_000, keyFn: (c) => c.var.uid }));
 app.route('/api/auth', authRoutes);
 
 // --- Single-container static serving (finalized in M2) ---------------------
