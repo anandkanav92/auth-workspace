@@ -1,3 +1,16 @@
+# PocketBase note: finance-tracker has NO PocketBase service of its own — it
+# shares the workspace-wide PocketBase that habit-tracker operates. Our schema
+# is a set of JS migration files under server/pb-schema/migrations/ that
+# PocketBase auto-applies on boot (see server/pb-schema/README.md).
+#
+# IN PRODUCTION: whichever PocketBase container runs on the Mac Mini must mount
+# our migrations directory into its --migrationsDir so our 8 collections get
+# created alongside habit-tracker's. Add to that container's service:
+#
+#   volumes:
+#     - ../finance-tracker/server/pb-schema/migrations:/pb/pb_migrations:ro
+#
+# (adjust the host path to wherever this repo is checked out on the Mac Mini).
 services:
   finance-tracker:
     build:
