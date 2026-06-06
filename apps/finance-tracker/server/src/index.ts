@@ -4,11 +4,21 @@ import { dirname, join } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import * as Sentry from '@sentry/node';
 import { authMiddleware } from './middleware/auth';
 import { rateLimit } from './middleware/rateLimit';
 import { authRoutes } from './routes/auth';
+import { errorHandler } from './middleware/errorHandler';
+
+// Reviewer fix N4: error tracking. No-op locally (init skipped without a DSN).
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0.1 });
+}
 
 const app = new Hono();
+
+// Central error handler reports unhandled route errors to Sentry.
+app.onError(errorHandler);
 
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
 
