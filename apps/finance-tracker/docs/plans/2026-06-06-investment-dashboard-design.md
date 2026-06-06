@@ -156,20 +156,22 @@ Cloudflare Tunnel routes `invest.cya.run` → BFF only. PocketBase has no host p
 ```ts
 // symbol_profiles — sector, country, market cap, ratios; refreshed weekly
 {
-  ticker:           string,  // unique index
-  isin:             string?, // indexed (join from imports)
-  name:             string,
-  exchange:         string,
-  listing_currency: string,
-  sector:           string?,
-  industry:         string?,
-  country:          string?,
-  market_cap:       number?,
-  pe_ratio:         number?,
-  beta:             number?,
-  dividend_yield:   number?,
-  data_source:      "yahoo" | "finnhub",
-  last_refreshed_at: datetime,
+  ticker:            string,  // unique index
+  isin:              string?, // indexed (join from imports)
+  name:              string,
+  exchange:          string,
+  asset_type:        "stock" | "etf" | "other",  // spike 3: drives allocation look-through
+  listing_currency:  string,
+  sector:            string?,  // null for ETFs (expected)
+  industry:          string?,
+  country:           string?,  // null for ETFs (expected)
+  market_cap:        number?,
+  pe_ratio:          number?,
+  beta:              number?,
+  dividend_yield:    number?,
+  sector_weightings: json?,    // ETFs only: { "technology": 0.24, ... } for look-through
+  data_source:       "yahoo" | "finnhub",
+  last_refreshed_at:  datetime,
 }
 
 // price_cache — current spot price per ticker; refreshed hourly during market hours
@@ -298,6 +300,10 @@ TWR, XIRR, Sharpe, Sortino, max drawdown. All require either dated cash flows or
 
 - **"Return vs cost basis"**, not "true return". Tooltip explains we'll switch to TWR once enough history exists.
 - **"Snapshot diversification"** — based on today's holdings, not a smoothed average.
+
+### ETF allocation look-through (spike 3 finding)
+
+Yahoo's `assetProfile` returns no sector/country for ETFs — and ETFs (VWRL, IWDA, etc.) are the dominant holding for the target user. Mitigation, verified live: branch on `quoteType`; for ETFs pull `topHoldings.sectorWeightings` and distribute the position's value across those sectors in the Allocation/Diversification tiles. Geographic look-through for ETFs is **not** cleanly available from Yahoo — ETFs contribute to a "Multiple/Diversified" geo bucket in v1; true geo look-through is deferred to Phase 2. See `docs/spikes/2026-06-06-spikes-3-4-results.md`.
 
 ### Modular tile registry
 

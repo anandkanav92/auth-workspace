@@ -826,9 +826,11 @@ export type Quote = { ticker: string; price: number; currency: string; asOf: Dat
 
 export type SymbolProfile = {
   ticker: string; isin?: string; name: string; exchange: string;
+  assetType: 'stock' | 'etf' | 'other';   // spike 3: drives allocation look-through
   listingCurrency: string; sector?: string; industry?: string;
   country?: string; marketCap?: number; peRatio?: number;
   beta?: number; dividendYield?: number;
+  sectorWeightings?: Record<string, number>;  // ETFs only: sector → weight
 };
 
 export interface PriceProvider {
@@ -884,26 +886,29 @@ describe('YahooPriceProvider', () => {
 
 **Step 2 — Implement**
 
+> **Spike 3 findings baked in (see `docs/spikes/2026-06-06-spikes-3-4-results.md`):**
+> 1. `yahoo-finance2` v3 requires `new YahooFinance()` — the v2 default-singleton import throws.
+> 2. ETFs return NULL for sector/country/marketCap via `assetProfile`. For ETFs we branch on `quoteType` and pull `topHoldings.sectorWeightings` so the Allocation tile can do sector look-through. (VWRL.L, IWDA.AS, etc. — the most common holdings for our target user — depend on this.)
+
 ```ts
 // src/providers/yahoo.ts
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
 import type { PriceProvider, Quote, SymbolProfile } from './types';
 
 export class YahooPriceProvider implements PriceProvider {
   name = 'yahoo' as const;
+  private yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
-  private async getSummary(ticker: string) {
+  private async getSummary(ticker: string, modules: string[]) {
     try {
-      return await yahooFinance.quoteSummary(ticker, {
-        modules: ['price', 'summaryDetail', 'assetProfile', 'defaultKeyStatistics'],
-      });
+      return await this.yf.quoteSummary(ticker, { modules: modules as any });
     } catch {
       return null;
     }
   }
 
   async quote(ticker: string): Promise<Quote | null> {
-    const s = await this.getSummary(ticker);
+    const s = await this.getSummary(ticker, ['price']);
     if (!s?.price?.regularMarketPrice) return null;
     return {
       ticker,
@@ -914,31 +919,51 @@ export class YahooPriceProvider implements PriceProvider {
   }
 
   async profile(ticker: string): Promise<SymbolProfile | null> {
-    const s = await this.getSummary(ticker);
+    const s = await this.getSummary(ticker, ['price', 'summaryDetail', 'assetProfile', 'defaultKeyStatistics', 'quoteType']);
     if (!s?.price) return null;
+    const assetType = s.quoteType?.quoteType === 'ETF' ? 'etf'
+      : s.quoteType?.quoteType === 'EQUITY' ? 'stock' : 'other';
+
+    let sectorWeightings: Record<string, number> | undefined;
+    if (assetType === 'etf') {
+      const th = await this.getSummary(ticker, ['topHoldings']);
+      const raw = th?.topHoldings?.sectorWeightings;
+      if (raw) {
+        sectorWeightings = {};
+        for (const entry of raw) {
+          const [k, v] = Object.entries(entry)[0] as [string, number];
+          sectorWeightings[k] = v;
+        }
+      }
+    }
+
     return {
       ticker,
+      assetType,
       name: s.price.longName || s.price.shortName || ticker,
       exchange: s.price.exchangeName!,
       listingCurrency: s.price.currency!,
-      sector: s.assetProfile?.sector,
+      sector: s.assetProfile?.sector,        // null for ETFs — expected
       industry: s.assetProfile?.industry,
-      country: s.assetProfile?.country,
+      country: s.assetProfile?.country,      // null for ETFs — expected
       marketCap: s.price.marketCap,
       peRatio: s.summaryDetail?.trailingPE,
       beta: s.defaultKeyStatistics?.beta,
       dividendYield: s.summaryDetail?.dividendYield,
+      sectorWeightings,                       // populated only for ETFs
     };
   }
 
   async search(query: string) {
-    const res = await yahooFinance.search(query, { quotesCount: 10, newsCount: 0 });
+    const res = await this.yf.search(query, { quotesCount: 10, newsCount: 0 });
     return (res.quotes || []).filter((q: any) => q.symbol).map((q: any) => ({
       ticker: q.symbol, name: q.longname || q.shortname || q.symbol, exchange: q.exchange,
     }));
   }
 }
 ```
+
+The fixture in Step 1 must capture **both** an equity (`AAPL`, full `assetProfile`) and an ETF (`VWRL.L`, null `assetProfile` + populated `topHoldings.sectorWeightings`). Add a test asserting `profile('VWRL.L').assetType === 'etf'` and `sectorWeightings` is non-empty, and `profile('AAPL').sector === 'Technology'`.
 
 **Step 3 — Run tests + commit**
 
@@ -1395,7 +1420,7 @@ Commits: `feat(finance-tracker): add /api/search`, `test(finance-tracker): searc
 ### Tasks
 
 - 11.1: `tiles/types.ts` + `tiles/registry.ts` + `tiles/usePortfolioData.ts` (TanStack Query joining `/api/holdings` + cached prices + symbol profiles + FX into a `Portfolio` object).
-- 11.2: `<Allocation />` — donut chart (ECharts) with tabs for sector/country/currency.
+- 11.2: `<Allocation />` — donut chart (ECharts) with tabs for sector/country/currency. **Spike 3 fix:** sector aggregation handles two cases — a `stock` contributes its full position value to its single `sector`; an `etf` distributes its position value across `sectorWeightings` (look-through). Holdings with no sector data (rare `other` type) go to an explicit **"Uncategorised"** bucket (reviewer fix I9). Geographic tab: ETFs lack clean country data from Yahoo, so they contribute to a **"Multiple/Diversified"** geo bucket rather than "Uncategorised" — documented as a v1 limitation, true geo look-through deferred to Phase 2. Test with a fixture portfolio mixing 2 stocks + 1 ETF, asserting the ETF's value is spread across sectors.
 - 11.3: `<Concentration />` — top 5 list with horizontal bars.
 - 11.4: `<DiversificationScore />` — **Reviewer fix (B4):** the design's composite `100 × (1 − cbrt(sector_HHI × geo_HHI × top5_share))` cubed two correlated signals (top5_share and HHI both measure top-position concentration). Replace top5_share with **Effective N** = `1 / overall_HHI` rendered as the headline, with sector / geo / currency HHI shown as three sub-scores beneath. Composite becomes optional. Add a fixture test asserting score values for canonical portfolios: single-position = 0, 2 equal = ~37, 5 equal = ~60, 50 equal = ~90. SVG circular progress for the headline.
 - 11.5: `<Income />` — weighted yield + expected annual.
