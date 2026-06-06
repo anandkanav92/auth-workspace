@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { authMiddleware } from '../src/middleware/auth';
+import { pbAdmin } from '../src/lib/pb';
 
 // Per-test controllable token verification (reviewer fix I6): the failing path
 // MUST be exercised, so each test sets `verifyImpl` to succeed/throw. We drive
@@ -22,16 +23,22 @@ vi.mock('../src/lib/firebase', () => ({
 }));
 
 // pbAdmin is mocked so no live PocketBase / credentials are needed. The mocked
-// users collection has no existing record (getFirstListItem rejects) so the
-// middleware takes the create path and gets pb-id-1 back.
-vi.mock('../src/lib/pb', () => ({
-  pbAdmin: vi.fn().mockResolvedValue({
-    collection: () => ({
-      getFirstListItem: vi.fn().mockRejectedValue(new Error('not found')),
-      create: vi.fn().mockResolvedValue({ id: 'pb-id-1' }),
+// users collection has no existing record (getFirstListItem rejects with a
+// 404-shaped error, matching Fix 1) so the middleware takes the create path and
+// gets pb-id-1 back. `filter` mirrors the real SDK's pb.filter(raw, params)
+// binding (Fix 2) — it just returns the raw string for the mock's purposes.
+vi.mock('../src/lib/pb', () => {
+  const notFound = Object.assign(new Error('not found'), { status: 404 });
+  return {
+    pbAdmin: vi.fn().mockResolvedValue({
+      filter: (raw: string) => raw,
+      collection: () => ({
+        getFirstListItem: vi.fn().mockRejectedValue(notFound),
+        create: vi.fn().mockResolvedValue({ id: 'pb-id-1' }),
+      }),
     }),
-  }),
-}));
+  };
+});
 
 describe('auth middleware', () => {
   it('401 when no Authorization header', async () => {
@@ -63,5 +70,40 @@ describe('auth middleware', () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ uid: 'fb-uid-123', pbUserId: 'pb-id-1' });
+  });
+
+  // Reviewer fix B1b: the UID->pbUserId LRU cache means a second request with the
+  // same UID must NOT re-query PocketBase. The token, however, is ALWAYS verified.
+  it('caches UID->pbUserId: pbAdmin once, verifyIdToken per request', async () => {
+    // Unique UID so the module-level LRU (which persists across tests in this
+    // file) is guaranteed empty for this case — no cross-test contamination.
+    const uid = 'fb-uid-cache-only';
+    let verifyCalls = 0;
+    verifyImpl = () => {
+      verifyCalls += 1;
+      return Promise.resolve({ uid, email: 'cache@test' });
+    };
+
+    // Reset pbAdmin call history so the assertion is independent of prior tests.
+    vi.mocked(pbAdmin).mockClear();
+
+    const app = new Hono()
+      .use('/api/*', authMiddleware)
+      .get('/api/x', (c) => c.json({ pbUserId: c.var.pbUserId }));
+
+    const first = await app.request('/api/x', {
+      headers: { Authorization: 'Bearer good' },
+    });
+    const second = await app.request('/api/x', {
+      headers: { Authorization: 'Bearer good' },
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    // The PocketBase lookup happened exactly once; the second request was served
+    // from the LRU cache.
+    expect(vi.mocked(pbAdmin)).toHaveBeenCalledTimes(1);
+    // The token is verified on every request, cache hit or not.
+    expect(verifyCalls).toBe(2);
   });
 });

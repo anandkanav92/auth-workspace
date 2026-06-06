@@ -25,10 +25,18 @@ export const authMiddleware = createMiddleware<{
   let pbUserId = uidToPbId.get(decoded.uid);
   if (!pbUserId) {
     const pb = await pbAdmin();
+    // Fix 2: parameterized filter (pb.filter auto-escapes) instead of string
+    // interpolation — defense-in-depth even though Firebase UIDs are alphanumeric.
+    // Fix 1: only a genuine 404 means "no user yet, create one". Any other error
+    // (network, 5xx, timeout) for an existing user must propagate, not silently
+    // fall through to a needless create attempt that then surfaces as a 500.
     const existing = await pb
       .collection('users')
-      .getFirstListItem(`firebase_uid="${decoded.uid}"`)
-      .catch(() => null);
+      .getFirstListItem(pb.filter('firebase_uid = {:uid}', { uid: decoded.uid }))
+      .catch((e: any) => {
+        if (e?.status === 404) return null;
+        throw e;
+      });
     if (existing) {
       pbUserId = existing.id;
     } else {
