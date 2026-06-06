@@ -1,0 +1,23 @@
+{
+  "name": "finance-tracker-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.0.0",
+    "@hono/node-server": "^1.0.0",
+    "firebase-admin": "^13.0.0",
+    "pocketbase": "^0.23.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5",
+    "@types/node": "^20",
+    "vitest": "^4.1.0"
+  }
+}
