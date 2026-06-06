@@ -4,10 +4,18 @@ import { dirname, join } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import { authMiddleware } from './middleware/auth';
+import { authRoutes } from './routes/auth';
 
 const app = new Hono();
 
 app.get('/health', (c) => c.json({ ok: true, ts: Date.now() }));
+
+// --- API routes (MUST be registered ABOVE the SPA fallback below) ----------
+// Every /api/* request requires a valid Firebase ID token; authMiddleware sets
+// c.var.uid / email / pbUserId for downstream handlers.
+app.use('/api/*', authMiddleware);
+app.route('/api/auth', authRoutes);
 
 // --- Single-container static serving (finalized in M2) ---------------------
 // In production the built web SPA lives next to the compiled server. From
