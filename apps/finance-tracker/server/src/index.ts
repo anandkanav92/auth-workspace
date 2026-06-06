@@ -21,7 +21,14 @@ const webRoot = webDistCandidates.find((p) => existsSync(p));
 if (webRoot) {
   app.use('/*', serveStatic({ root: webRoot }));
   // SPA fallback: any unmatched, non-API route returns index.html.
-  app.get('*', serveStatic({ path: join(webRoot, 'index.html') }));
+  // All /api/* routes must be registered ABOVE this SPA fallback (see M2).
+  // API paths must never be swallowed by the catch-all: fall through to the
+  // (future) API handlers / 404 so they never receive index.html.
+  const serveIndex = serveStatic({ path: join(webRoot, 'index.html') });
+  app.get('*', (c, next) => {
+    if (c.req.path.startsWith('/api/')) return next();
+    return serveIndex(c, next);
+  });
   console.log(`finance-tracker serving web from ${webRoot}`);
 }
 
