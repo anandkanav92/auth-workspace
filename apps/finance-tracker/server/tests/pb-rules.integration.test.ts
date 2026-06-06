@@ -2,13 +2,18 @@
 //
 // INTEGRATION TEST (not a unit test): runs against a real, locally-spawned
 // PocketBase v0.23.11 with our committed migrations applied (see
-// tests/pb-test-server.ts globalSetup). It asserts that user A can observe
-// NONE of user B's `accounts` rows via either:
-//   1. getFullList()  — the REST list rule, and
-//   2. subscribe('*') — the realtime stream rule.
+// tests/pb-test-server.ts globalSetup). It asserts two things:
 //
-// If either assertion fails, the multi-tenant isolation is broken and the
-// app must not ship. Requires EventSource (run with
+//   1. Per-user isolation: user A can observe NONE of user B's rows across
+//      ALL FIVE per-user collections (accounts, holdings, transactions,
+//      imports, holdings_snapshot) via getFullList() — the REST list rule —
+//      and, for accounts, via subscribe('*') — the realtime stream rule.
+//
+//   2. Shared-collection write lock: a normal authed user CANNOT create rows
+//      in the superuser-only shared collections (symbol_profiles, price_cache).
+//
+// If any assertion fails, the multi-tenant isolation / write lock is broken
+// and the app must not ship. Requires EventSource (run with
 // NODE_OPTIONS=--experimental-eventsource, wired in the test:integration script).
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -16,6 +21,16 @@ import PocketBase from 'pocketbase';
 import { USER_A, USER_B } from './pb-test-server';
 
 const PB_URL = process.env.PB_URL!;
+
+// All five per-user collections share the same rule string. We exercise every
+// one so a future hand-edit weakening any single collection's rule is caught.
+const PER_USER_COLLECTIONS = [
+  'accounts',
+  'holdings',
+  'transactions',
+  'imports',
+  'holdings_snapshot',
+] as const;
 
 describe('PocketBase per-user isolation (Spike 5)', () => {
   let pbA: PocketBase;
@@ -42,21 +57,98 @@ describe('PocketBase per-user isolation (Spike 5)', () => {
     pbB?.authStore.clear();
   });
 
-  it('getFullList(): user A does NOT see user B rows', async () => {
+  // Build a minimal valid row owned by `userId` for `coll`. Child collections
+  // (everything except accounts) need a valid `account` relation owned by the
+  // same user, so the caller passes B's pre-created account id.
+  function minimalRow(
+    coll: (typeof PER_USER_COLLECTIONS)[number],
+    userId: string,
+    accountId: string,
+    label: string,
+  ): Record<string, unknown> {
+    const nowIso = new Date().toISOString();
+    switch (coll) {
+      case 'accounts':
+        return { user: userId, source: 'manual', label };
+      case 'holdings':
+        return {
+          user: userId,
+          account: accountId,
+          ticker: label, // doubles as the leak marker (unique per row)
+          quantity: 1,
+          source: 'manual',
+        };
+      case 'transactions':
+        return {
+          user: userId,
+          account: accountId,
+          type: 'buy',
+          ticker: label,
+          quantity: 1,
+          price: 1,
+          currency: 'USD',
+          occurred_at: nowIso,
+          source: 'manual',
+        };
+      case 'imports':
+        return {
+          user: userId,
+          account: accountId,
+          source: 'revolut',
+          filename: label,
+          file_hash: label, // unique per row, satisfies (user, file_hash) index
+          status: 'success',
+        };
+      case 'holdings_snapshot':
+        return {
+          user: userId,
+          account: accountId,
+          ticker: label,
+          quantity: 1,
+          eur_value: 1,
+          date: nowIso,
+        };
+    }
+  }
+
+  // A stable per-collection marker we can search for in A's view of each
+  // collection. accounts uses `label`; the rest carry the marker in `ticker`
+  // (or `filename` for imports), but every row also carries B's `user` id,
+  // which is the authoritative leak check below.
+  function markerFor(coll: (typeof PER_USER_COLLECTIONS)[number]): string {
+    return `B-secret-${coll}`;
+  }
+
+  it('getFullList(): user A sees NONE of user B rows across all five per-user collections', async () => {
     const bId = pbB.authStore.record!.id;
-    await pbB
+
+    // Child collections need an account owned by B; create it once and reuse.
+    const bAccount = await pbB
       .collection('accounts')
-      .create({ user: bId, source: 'manual', label: 'B-secret-list' });
+      .create({ user: bId, source: 'manual', label: 'B-parent-account' });
 
-    const aSees = await pbA.collection('accounts').getFullList();
-    const labels = aSees.map((r) => r.label);
+    for (const coll of PER_USER_COLLECTIONS) {
+      const marker = markerFor(coll);
+      await pbB.collection(coll).create(minimalRow(coll, bId, bAccount.id, marker));
 
-    expect(labels).not.toContain('B-secret-list');
-    // Stronger: A must see none of B's rows at all.
-    expect(aSees.every((r) => r.user !== bId)).toBe(true);
+      const aSees = await pbA.collection(coll).getFullList();
+
+      // No row should carry the B-owned marker...
+      const markerFields = aSees.flatMap((r) => [r.label, r.ticker, r.filename]);
+      expect(
+        markerFields,
+        `A leaked B's ${coll} row (marker visible)`,
+      ).not.toContain(marker);
+
+      // ...and, the authoritative check: A must see none of B's rows at all.
+      expect(
+        aSees.every((r) => r.user !== bId),
+        `A leaked at least one ${coll} row owned by B`,
+      ).toBe(true);
+    }
   });
 
-  it("subscribe('*'): user A receives NO realtime event for user B's create", async () => {
+  it("subscribe('*'): user A receives NO realtime event for user B's create (accounts)", async () => {
     const aReceived: Array<{ label: string; user: string }> = [];
 
     await pbA.collection('accounts').subscribe('*', (e) => {
@@ -80,6 +172,36 @@ describe('PocketBase per-user isolation (Spike 5)', () => {
       'A must not receive B realtime events',
     ).toBeUndefined();
     expect(aReceived.every((r) => r.user !== bId)).toBe(true);
+  });
+
+  it('shared collections: a normal authed user CANNOT write (superuser-only rule)', async () => {
+    const nowIso = new Date().toISOString();
+
+    // symbol_profiles: create must be rejected (null createRule = superuser only).
+    await expect(
+      pbA.collection('symbol_profiles').create({
+        ticker: 'TEST',
+        name: 'x',
+        exchange: 'x',
+        asset_type: 'stock',
+        listing_currency: 'USD',
+        data_source: 'yahoo',
+        last_refreshed_at: nowIso,
+      }),
+      'authed user must not be able to create symbol_profiles',
+    ).rejects.toThrow();
+
+    // price_cache: same lock, cheap to check.
+    await expect(
+      pbA.collection('price_cache').create({
+        ticker: 'TEST',
+        price: 1,
+        currency: 'USD',
+        data_source: 'yahoo',
+        last_fetched_at: nowIso,
+      }),
+      'authed user must not be able to create price_cache',
+    ).rejects.toThrow();
   });
 
   it('sanity: user A DOES see its own row via both list and realtime', async () => {
