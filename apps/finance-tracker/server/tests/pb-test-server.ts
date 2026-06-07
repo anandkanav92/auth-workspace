@@ -121,8 +121,15 @@ export async function setup() {
   await createUser(token, USER_A.email, USER_A.password);
   await createUser(token, USER_B.email, USER_B.password);
 
-  // Hand the URL to the test process.
+  // Hand the URL + admin credentials to the test process. The data-access
+  // repos go through src/lib/pb.ts's pbAdmin(), which reads PB_URL and (absent
+  // a PB_ADMIN_TOKEN) falls back to PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD. We point
+  // those at the seeded superuser so repo integration tests can perform
+  // admin-token-equivalent writes. Set BEFORE any test file imports pb.ts
+  // (globalSetup runs first, in this same process).
   process.env.PB_URL = PB_URL;
+  process.env.PB_ADMIN_EMAIL = SUPERUSER.email;
+  process.env.PB_ADMIN_PASSWORD = SUPERUSER.password;
 }
 
 export async function teardown() {
