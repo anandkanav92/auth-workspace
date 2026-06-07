@@ -46,4 +46,8 @@ COPY --from=server-builder /app /app
 WORKDIR /app/apps/finance-tracker/server
 EXPOSE 80
 ENV PORT=80
-CMD ["node", "dist/index.js"]
+# Run the TypeScript entry via tsx. The server's compiled ESM uses extensionless
+# relative imports (valid TS, but Node ESM needs .js), so `node dist/index.js`
+# fails to resolve them; tsx (esbuild-based, like the dev server) resolves them
+# correctly. The full workspace incl. tsx is present in the image.
+CMD ["npm", "start"]
