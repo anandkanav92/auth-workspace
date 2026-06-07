@@ -1,32 +1,38 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider } from "@tanstack/react-router";
+
+import { AuthGate } from "@/components/auth/AuthGate";
 import { ThemeProvider } from "@/lib/theme";
-import { LayoutPreview } from "@/dev/LayoutPreview";
+import { queryClient } from "@/lib/queryClient";
+import { router } from "@/router";
 
 /**
- * Lightweight path switch. No router is wired up yet (milestone 9 is the shell
- * only), so we read the pathname directly. `/dev/layout` is a temporary
- * dev-only visual-QA surface for the layout components and will be removed once
- * a real router and pages land.
+ * App composition (M10):
+ *   ThemeProvider          design tokens / light-dark
+ *   └─ QueryClientProvider TanStack Query (drives useMe + later tile data)
+ *      └─ AuthGate          Firebase auth boundary (LoginPage when signed out)
+ *         └─ RouterProvider TanStack Router (the routed app shell)
+ *
+ * `/dev/layout` is a dev-only visual-QA surface with no auth or BFF dependency,
+ * so it renders the router directly, bypassing the AuthGate (matches the M9
+ * behaviour where the preview was reachable without signing in).
  */
 function App() {
-  const path =
-    typeof window !== "undefined" ? window.location.pathname : "/";
+  const isDevLayout =
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/dev/layout");
 
   return (
     <ThemeProvider>
-      {path === "/dev/layout" ? (
-        <LayoutPreview />
-      ) : (
-        <main className="min-h-screen bg-bg p-6 text-fg">
-          <h1 className="text-2xl font-semibold">Finance Tracker</h1>
-          <p className="mt-2 text-muted">Investment dashboard — coming soon.</p>
-          <p className="mt-4 text-sm text-muted">
-            Dev preview:{" "}
-            <a className="text-accent underline" href="/dev/layout">
-              /dev/layout
-            </a>
-          </p>
-        </main>
-      )}
+      <QueryClientProvider client={queryClient}>
+        {isDevLayout ? (
+          <RouterProvider router={router} />
+        ) : (
+          <AuthGate>
+            <RouterProvider router={router} />
+          </AuthGate>
+        )}
+      </QueryClientProvider>
     </ThemeProvider>
   );
 }
