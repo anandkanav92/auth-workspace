@@ -38,11 +38,12 @@ describe('Trading212PdfImporter', () => {
     expect(aapl!.cost_basis).toBeCloseTo(3.5 * 150, 4); // 525
     expect(aapl!.cost_currency).toBe('USD');
 
-    // ETF row (SGLN, GBX listing) parses with cost basis too.
+    // ETF row (SGLN, GBX/pence listing) parses with cost basis too — and pence
+    // is normalised to GBP (÷100): 10 × 5000 GBX = 50000 GBX → 500 GBP.
     const sgln = positions.find((p) => p.ticker === 'SGLN');
     expect(sgln).toBeDefined();
-    expect(sgln!.cost_basis).toBeCloseTo(10 * 5000, 2); // 50000
-    expect(sgln!.cost_currency).toBe('GBX');
+    expect(sgln!.cost_basis).toBeCloseTo(10 * 50, 2); // 500 GBP
+    expect(sgln!.cost_currency).toBe('GBP');
 
     // Every position carries a non-undefined cost basis (T212 invariant).
     for (const p of positions) {

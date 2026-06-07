@@ -1,5 +1,6 @@
 import YahooFinance from 'yahoo-finance2';
 import type { PriceProvider, Quote, SymbolProfile, SearchResult } from './types';
+import { normalizePence, normalizeCurrencyCode } from './currency';
 
 // Spike 3 findings (see docs/spikes/2026-06-06-spikes-3-4-results.md):
 //   1. yahoo-finance2 v3 requires `new YahooFinance()` — the v2 default-singleton
@@ -22,10 +23,16 @@ export class YahooPriceProvider implements PriceProvider {
   async quote(ticker: string): Promise<Quote | null> {
     const s = await this.getSummary(ticker, ['price']);
     if (!s?.price?.regularMarketPrice) return null;
+    // LSE tickers come back in pence (currency "GBp"); normalise to GBP so the
+    // value/FX math downstream (which only knows ECB majors) is correct.
+    const { amount, currency } = normalizePence(
+      s.price.regularMarketPrice,
+      s.price.currency!,
+    );
     return {
       ticker,
-      price: s.price.regularMarketPrice,
-      currency: s.price.currency!,
+      price: amount,
+      currency: currency!,
       asOf: new Date((s.price.regularMarketTime as Date) || Date.now()),
       source: this.name,
     };
@@ -66,7 +73,9 @@ export class YahooPriceProvider implements PriceProvider {
       assetType,
       name: s.price.longName || s.price.shortName || ticker,
       exchange: s.price.exchangeName!,
-      listingCurrency: s.price.currency!,
+      // Normalise GBp → GBP so the Allocation/currency tiles bucket pence-quoted
+      // LSE listings under their real currency rather than an unknown "GBp".
+      listingCurrency: normalizeCurrencyCode(s.price.currency!)!,
       sector: s.assetProfile?.sector, // null for ETFs — expected
       industry: s.assetProfile?.industry,
       country: s.assetProfile?.country, // null for ETFs — expected

@@ -82,4 +82,25 @@ if (process.env.CRON_ENABLED === 'true') {
   console.log(
     `finance-tracker cron enabled (${CRON_JOBS.map((j) => j.name).join(', ')})`,
   );
+
+  // Self-heal market data on boot. node-cron only fires at scheduled times, so a
+  // deploy/restart BETWEEN ticks leaves price_cache + fx_rates stale — or empty
+  // on a first boot. The schedules make this acute: prices refresh only on
+  // weekday hours, FX only at 16:30. Without this, a fresh deploy + import on a
+  // weekend shows €0 for everything until Monday. Run FX then prices once now;
+  // best-effort and fully detached so a slow/failed upstream never blocks boot.
+  void (async () => {
+    try {
+      const { runRefreshFx } = await import('./cron/refreshFx');
+      console.log('[boot] refreshFx', await runRefreshFx());
+    } catch (err) {
+      console.error('[boot] refreshFx failed:', err);
+    }
+    try {
+      const { runRefreshPrices } = await import('./cron/refreshPrices');
+      console.log('[boot] refreshPrices', await runRefreshPrices());
+    } catch (err) {
+      console.error('[boot] refreshPrices failed:', err);
+    }
+  })();
 }

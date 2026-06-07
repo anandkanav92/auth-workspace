@@ -51,6 +51,16 @@ describe('FinnhubPriceProvider', () => {
     expect(await p.quote('AAPL')).toBeNull();
   });
 
+  it('skips non-US (suffixed) tickers without hitting the network', async () => {
+    const spy = mockFetch({ '/quote': { body: quoteFixture } });
+    const p = new FinnhubPriceProvider('test-key');
+    // Finnhub free tier is US-only and always says USD — a ".L"/".DE" ticker
+    // would get a wrong, USD-mislabeled price, so it must short-circuit to null.
+    expect(await p.quote('SGLN.L')).toBeNull();
+    expect(await p.quote('NQSE.DE')).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('maps /stock/profile2 to a SymbolProfile with marketCap in absolute units', async () => {
     mockFetch({ '/stock/profile2': { body: profileFixture } });
     const p = new FinnhubPriceProvider('test-key');

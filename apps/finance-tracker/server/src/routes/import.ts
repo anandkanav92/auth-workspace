@@ -133,9 +133,10 @@ export const importRoutes = new Hono<Vars>()
     const knownTickers = await knownTickerSet(parsed.positions.map((p) => p.ticker));
     const diff = computeDiff(parsed.positions, current, knownTickers);
 
-    // Synchronously enrich tickers that have no symbol_profiles row yet, so the
-    // preview can show names + prices. Failures are non-fatal (best effort).
-    await enrichNewTickers(diff);
+    // Synchronously fetch a fresh PRICE for every imported ticker (and a profile
+    // for any new ones) so the preview AND the dashboard show real values
+    // immediately — not €0 until the next weekday price-cron tick. Best effort.
+    await enrichTickers(diff);
 
     const previewId = putPreview({
       pbUserId,
@@ -240,18 +241,27 @@ async function knownTickerSet(tickers: string[]): Promise<Set<string>> {
 }
 
 /**
- * For each NEW ticker in the diff, synchronously fetch its profile + price and
- * cache them. Best-effort: a failed fetch leaves the ticker unenriched but does
- * not fail the upload (the preview just won't show a name/price for it).
+ * Enrich the imported tickers' shared market data. Best-effort: a failed fetch
+ * leaves the ticker unenriched but does not fail the upload.
+ *
+ * PRICE is fetched for EVERY imported ticker (not just new ones). This is the
+ * fix for "dashboard shows €0 after import": `resolveTicker` upserts a profile
+ * during parse, so by the time we get here every ticker already looks "known" —
+ * the old new-tickers-only gate therefore fetched NO prices, and price_cache was
+ * only ever filled by the hourly weekday cron (so a weekend import stayed €0).
+ *
+ * PROFILE is the heavier call (sector/ETF look-through) and `resolveTicker`
+ * already cached it for tickers it resolved, so we only (re)fetch it for tickers
+ * that are genuinely new here.
  */
-async function enrichNewTickers(diff: DiffEntry[]): Promise<void> {
-  // Skip 'removed' entries: a holding the statement dropped is not a ticker we
-  // need to enrich (it carries no new profile/price to fetch).
-  const todo = diff.filter((d) => d.isNewTicker && d.status !== 'removed');
+async function enrichTickers(diff: DiffEntry[]): Promise<void> {
+  // Skip 'removed' entries: a holding the statement dropped no longer needs a
+  // price/profile.
+  const present = diff.filter((d) => d.status !== 'removed');
   await Promise.all(
-    todo.map(async (d) => {
+    present.map(async (d) => {
       const [profile, quote] = await Promise.all([
-        provider.profile(d.ticker).catch(() => null),
+        d.isNewTicker ? provider.profile(d.ticker).catch(() => null) : null,
         provider.quote(d.ticker).catch(() => null),
       ]);
       if (profile) {

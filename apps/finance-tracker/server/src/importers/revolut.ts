@@ -85,7 +85,9 @@ export class RevolutPdfImporter implements StatementImporter {
 
     // Symbol is verified against the ISIN: resolveTicker maps the ISIN to the
     // canonical ticker (falling back to the broker symbol if unresolved).
-    const ticker = await resolveTicker(isin, symbol);
+    // Revolut statements are USD-denominated, so steer resolution to the US
+    // listing (avoids picking a same-ISIN foreign listing).
+    const ticker = await resolveTicker(isin, symbol, 'USD');
     return {
       ticker,
       isin,

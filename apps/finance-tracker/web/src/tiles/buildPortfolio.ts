@@ -41,6 +41,13 @@ export function hasCostBasis(holding: Holding): boolean {
 /** Multiplier converting one unit of `currency` into EUR. Defaults to 1. */
 function fxToEur(currency: string, fx: FxRates): number {
   if (!currency || currency === "EUR") return 1;
+  // Defensive pence handling: the server normalises GBp/GBX → GBP before it ever
+  // reaches us, but if a pence-quoted price slips through, treat it as GBP ÷ 100
+  // (1 pence = 0.01 GBP) so it isn't valued 100× too high under a rate-1 default.
+  if (currency === "GBX" || currency === "GBp") {
+    const gbp = fx.rates["GBP"];
+    return gbp && gbp > 0 ? 1 / (100 * gbp) : 1;
+  }
   const rate = fx.rates[currency];
   if (!rate || rate <= 0) return 1; // defensive: unknown currency → treat as EUR
   return 1 / rate;
@@ -125,9 +132,14 @@ export function buildPortfolio(
   let totalCostEur = 0;
   let totalReturnEur = 0;
   let costlessCount = 0;
+  let unpricedCount = 0;
 
   for (const p of positions) {
     totalValueEur += p.valueEur;
+    // A position with no cached spot price (price ≤ 0) values to €0 and would
+    // silently drag every total/allocation down. Count them so the dashboard can
+    // tell the user prices are still loading rather than showing a wrong €0.
+    if (!(p.price > 0)) unpricedCount += 1;
     if (p.hasCost && p.costEur !== null) {
       totalCostEur += p.costEur;
       totalReturnEur += p.returnEur ?? 0;
@@ -149,5 +161,6 @@ export function buildPortfolio(
     totalReturnEur,
     totalReturnPct,
     costlessCount,
+    unpricedCount,
   };
 }

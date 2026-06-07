@@ -59,6 +59,16 @@ describe('YahooPriceProvider', () => {
     expect(prof?.sectorWeightings?.technology).toBeCloseTo(0.2901, 4);
   });
 
+  it('normalises a pence-quoted LSE price (GBp) to GBP ÷ 100', async () => {
+    mockQuoteSummary(() => ({
+      price: { regularMarketPrice: 6459, currency: 'GBp', regularMarketTime: new Date() },
+    }));
+    const p = new YahooPriceProvider();
+    const q = await p.quote('SGLN.L');
+    expect(q?.price).toBeCloseTo(64.59, 2);
+    expect(q?.currency).toBe('GBP');
+  });
+
   it('returns null for an unknown ticker (quoteSummary throws)', async () => {
     mockQuoteSummary(() => {
       throw new Error('Not Found');

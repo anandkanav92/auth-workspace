@@ -55,17 +55,21 @@ export function computeQuality(positions: Position[]): QualityResult {
   let betaWeightedSum = 0; // Σ (value × beta)
 
   for (const p of positions) {
-    if (isFiniteNumber(p.pe)) {
+    if (isFiniteNumber(p.pe) && p.pe !== 0) {
       if (p.pe > 0) {
         peValueSum += p.valueEur;
         reciprocalValueSum += p.valueEur / p.pe;
         peCount += 1;
       } else {
-        // Loss-making (pe ≤ 0): excluded from the harmonic mean (I11).
+        // Genuinely loss-making (pe < 0): excluded from the harmonic mean (I11).
         excludedCount += 1;
         excludedValueEur += p.valueEur;
       }
     }
+    // NOTE: pe === 0 (or missing) means "no P/E data" — NOT loss-making. PocketBase
+    // coerces a null pe_ratio to 0 on read, and ETFs have no P/E, so treating 0 as
+    // loss-making wrongly flagged every ETF + no-data stock. Such positions simply
+    // don't contribute to the weighted P/E.
 
     if (isFiniteNumber(p.beta)) {
       betaValueSum += p.valueEur;

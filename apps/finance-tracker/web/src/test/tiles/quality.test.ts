@@ -63,13 +63,16 @@ describe("computeQuality — negative-P/E exclusion (I11)", () => {
     expect(r.excludedFraction).toBeCloseTo(0.5, 6);
   });
 
-  it("treats pe === 0 as loss-making (excluded), not a valid 0 P/E", () => {
+  it("treats pe === 0 as NO DATA (not loss-making) — ETFs/missing P/E coerce to 0", () => {
     const r = computeQuality([
       pos({ ticker: "A", valueEur: 1000, pe: 20 }),
       pos({ ticker: "ZERO", valueEur: 1000, pe: 0 }),
     ]);
     expect(r.weightedPe).toBeCloseTo(20, 6);
-    expect(r.excludedCount).toBe(1);
+    // pe === 0 means "no P/E" (PocketBase null→0, or an ETF) — it must NOT be
+    // counted as a loss-making exclusion.
+    expect(r.excludedCount).toBe(0);
+    expect(r.peCount).toBe(1);
   });
 
   it("returns a null P/E when every position is loss-making or missing", () => {

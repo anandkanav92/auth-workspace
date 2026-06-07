@@ -131,6 +131,8 @@ export interface Portfolio {
   totalReturnPct: number | null;
   /** Count of positions excluded from return because they lack a cost basis. */
   costlessCount: number;
+  /** Count of positions with no cached spot price (valued at €0 until priced). */
+  unpricedCount: number;
 }
 
 /**

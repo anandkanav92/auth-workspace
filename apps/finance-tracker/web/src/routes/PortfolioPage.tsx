@@ -73,7 +73,22 @@ export function PortfolioPage() {
         changeEur={data.totalReturnEur}
         changePct={data.totalReturnPct}
         direction={direction}
+        // The delta is the unrealised return vs cost basis — NOT an intraday
+        // move. We have no daily-change baseline (no previous-close in the price
+        // cache, snapshots are nightly), so label it honestly.
+        periodLabel="Total return"
       />
+
+      {data.unpricedCount > 0 ? (
+        <p
+          className="mx-1 rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning"
+          role="status"
+        >
+          {data.unpricedCount} of {data.positions.length} position
+          {data.positions.length === 1 ? "" : "s"} aren’t priced yet — totals and
+          allocations may be incomplete. Live prices refresh within a few minutes.
+        </p>
+      ) : null}
 
       {data.costlessCount > 0 ? (
         <p className="px-1 text-xs text-muted">

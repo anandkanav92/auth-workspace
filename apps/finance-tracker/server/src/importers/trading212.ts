@@ -26,6 +26,7 @@ import {
   type TableRow,
 } from './pdf-table';
 import { resolveTicker } from './resolveTicker';
+import { normalizePence } from '../providers/currency';
 import type { ParsedPosition, ParsedStatement, StatementImporter } from './types';
 
 // Header tokens UNIQUE to the open-positions table (the pending-orders decoy has
@@ -100,16 +101,27 @@ export class Trading212PdfImporter implements StatementImporter {
     const brokerSymbol = cells[COL.instrument]?.trim();
     const quantity = parseNum(cells[COL.quantity]);
     const averagePrice = parseNum(cells[COL.averagePrice]);
-    const currency = cells[COL.currency]?.trim() || undefined;
+    const rawCurrency = cells[COL.currency]?.trim() || undefined;
     if (!brokerSymbol || quantity == null || averagePrice == null) return null;
 
-    const ticker = await resolveTicker(isin, brokerSymbol);
+    // Normalise pence (GBX) to GBP so cost_basis is a major-unit amount that the
+    // EUR conversion can actually convert (ECB has no "GBX" rate). e.g. SGLN's
+    // 5819.55 GBX avg × qty → cost in pence; ÷100 → GBP.
+    const { amount: cost_basis, currency: cost_currency } = normalizePence(
+      quantity * averagePrice,
+      rawCurrency,
+    );
+
+    // Pass the (normalised) statement currency so resolution prefers the right
+    // listing — multi-listing ISINs (e.g. SGLN.L GBp vs IGLN.L USD share one
+    // ISIN) and same-named US tickers would otherwise be mis-picked.
+    const ticker = await resolveTicker(isin, brokerSymbol, cost_currency);
     return {
       ticker,
       isin,
       quantity,
-      cost_basis: quantity * averagePrice,
-      cost_currency: currency,
+      cost_basis,
+      cost_currency,
     };
   }
 }

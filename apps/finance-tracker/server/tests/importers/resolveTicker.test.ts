@@ -85,4 +85,43 @@ describe('resolveTickerWith', () => {
       asset_type: 'other',
     });
   });
+
+  // --- currency-aware resolution (bug fix) ----------------------------------
+
+  it('prefers the London listing for a GBP/GBX instrument over a same-named US hit', async () => {
+    // iShares Physical Gold (IE00B4ND3602): Yahoo returns a bogus US "SGLN"
+    // penny stock FIRST, then the real SGLN.L. With GBP expected we must pick .L.
+    const deps = makeDeps({
+      byIsin: async () => null,
+      search: async () => [
+        { ticker: 'SGLN', name: 'Singularity (US OTC)', exchange: 'PNK' },
+        { ticker: 'SGLN.L', name: 'iShares Physical Gold', exchange: 'LSE' },
+      ],
+      profile: async () => ({ ...FULL_PROFILE, ticker: 'SGLN.L', listingCurrency: 'GBp' }),
+    });
+    const ticker = await resolveTickerWith('IE00B4ND3602', 'SGLN', deps, 'GBP');
+    expect(ticker).toBe('SGLN.L');
+  });
+
+  it('ignores a cached hit whose currency disagrees with the statement (multi-listing ISIN)', async () => {
+    // Cache holds the GBp listing (SGLN.L) for this ISIN, but THIS row is the USD
+    // line (IGLN.L). The shared ISIN must not return the wrong-currency cache.
+    const deps = makeDeps({
+      byIsin: async () => ({ ticker: 'SGLN.L', listing_currency: 'GBP' }),
+      search: async () => [{ ticker: 'IGLN.L', name: 'iShares Physical Gold USD', exchange: 'LSE' }],
+      profile: async () => ({ ...FULL_PROFILE, ticker: 'IGLN.L', listingCurrency: 'USD' }),
+    });
+    const ticker = await resolveTickerWith('IE00B4ND3602', 'IGLN', deps, 'USD');
+    expect(ticker).toBe('IGLN.L');
+    expect(deps.search).toHaveBeenCalled(); // cache was rejected → searched
+  });
+
+  it('trusts a cached hit when its currency matches the expectation (no search)', async () => {
+    const deps = makeDeps({
+      byIsin: async () => ({ ticker: 'AAPL', listing_currency: 'USD' }),
+    });
+    const ticker = await resolveTickerWith('US0378331005', 'AAPL', deps, 'USD');
+    expect(ticker).toBe('AAPL');
+    expect(deps.search).not.toHaveBeenCalled();
+  });
 });

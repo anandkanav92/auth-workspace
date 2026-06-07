@@ -93,6 +93,44 @@ describe("buildPortfolio", () => {
     expect(p.costlessCount).toBe(1);
   });
 
+  it("counts unpriced positions (price ≤ 0) for the coverage banner", () => {
+    const unpricedInputs: PortfolioInputs = {
+      ...inputs,
+      // No price row for TSLA → it values to €0 and must be flagged unpriced.
+      prices: [{ ticker: "AAPL", price: 220, currency: "USD" }],
+    };
+    const p = buildPortfolio(unpricedInputs);
+    expect(p.unpricedCount).toBe(1);
+    expect(p.positions.find((x) => x.ticker === "TSLA")!.valueEur).toBe(0);
+    // A fully-priced book reports zero unpriced.
+    expect(buildPortfolio(inputs).unpricedCount).toBe(0);
+  });
+
+  it("values a pence-quoted (GBp/GBX) position as GBP ÷ 100", () => {
+    const gbxInputs: PortfolioInputs = {
+      accounts: [{ id: "acc_t212", source: "trading212", label: "T212" }],
+      holdings: [
+        {
+          id: "h_sgln",
+          account: "acc_t212",
+          ticker: "SGLN.L",
+          quantity: 10,
+          cost_basis: 500,
+          cost_currency: "GBP",
+          source: "trading212",
+        },
+      ],
+      // A stray pence price slipping through must still value correctly:
+      // 10 × 6459 GBp = 64590 GBp = 645.90 GBP; ÷ GBP-rate 0.85 → ≈ 759.88 EUR.
+      prices: [{ ticker: "SGLN.L", price: 6459, currency: "GBp" }],
+      profiles: [{ ticker: "SGLN.L", asset_type: "etf", name: "iShares Gold" }],
+      fx: { rates: { EUR: 1, GBP: 0.85 } },
+    };
+    const p = buildPortfolio(gbxInputs);
+    const sgln = p.positions.find((x) => x.ticker === "SGLN.L")!;
+    expect(sgln.valueEur).toBeCloseTo((10 * 64.59) / 0.85, 4);
+  });
+
   it("leaves per-position return null when cost is absent", () => {
     const p = buildPortfolio(inputs);
     const tsla = p.positions.find((x) => x.ticker === "TSLA")!;
