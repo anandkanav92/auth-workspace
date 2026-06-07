@@ -1,5 +1,10 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "./styles/tokens.css";
+
+/* Tell Tailwind v4 that the `dark:` variant should follow our data-theme
+   attribute on <html>, not the prefers-color-scheme media query. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /*
  * shadcn/ui primitives reference Tailwind's `border-border`, `bg-background`,
