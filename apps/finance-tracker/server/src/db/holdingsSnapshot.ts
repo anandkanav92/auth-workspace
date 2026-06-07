@@ -34,6 +34,24 @@ export class HoldingsSnapshotRepo extends PerUserRepo<
   }
 
   /**
+   * USER-SCOPED snapshot rows on/after `since` (YYYY-MM-DD), optionally limited
+   * to one account, ordered by date ascending. Backs the portfolio value-over-
+   * time chart (GET /api/portfolio/history). Defensively scoped to the caller's
+   * user via the inherited PARAMETERIZED filter.
+   */
+  async historyForUser(
+    pbUserId: string,
+    since: string,
+    accountId?: string,
+  ): Promise<HoldingsSnapshot[]> {
+    const fragment = accountId
+      ? 'date >= {:since} && account = {:account}'
+      : 'date >= {:since}';
+    const params = accountId ? { since, account: accountId } : { since };
+    return this.listWhere(pbUserId, { fragment, params }, 'date');
+  }
+
+  /**
    * ADMIN-SCOPED, ALL-USERS read of every snapshot row strictly OLDER than
    * `before` (ISO datetime). Backs the weekly prune job. Cron only.
    */

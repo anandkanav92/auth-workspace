@@ -14,6 +14,7 @@ import { transactionRoutes } from './routes/transactions';
 import { importRoutes } from './routes/import';
 import { searchRoutes } from './routes/search';
 import { marketDataRoutes } from './routes/marketData';
+import { portfolioRoutes } from './routes/portfolio';
 import { errorHandler } from './middleware/errorHandler';
 
 // Reviewer fix N4: error tracking. No-op locally (init skipped without a DSN).
@@ -40,6 +41,7 @@ app.route('/api/holdings', holdingRoutes);
 app.route('/api/transactions', transactionRoutes);
 app.route('/api/import', importRoutes);
 app.route('/api/search', searchRoutes);
+app.route('/api/portfolio', portfolioRoutes);
 // Shared market data (prices / profiles / fx). Routes declare their own
 // /prices, /profiles, /fx subpaths so they mount under the /api prefix. Authed
 // but NOT user-scoped (same model as /api/search).
@@ -101,6 +103,14 @@ if (process.env.CRON_ENABLED === 'true') {
       console.log('[boot] refreshPrices', await runRefreshPrices());
     } catch (err) {
       console.error('[boot] refreshPrices failed:', err);
+    }
+    // Seed today's holdings snapshot (idempotent per day) so the value-over-time
+    // chart has a point immediately and starts accumulating from first deploy.
+    try {
+      const { runSnapshotHoldings } = await import('./cron/snapshotHoldings');
+      console.log('[boot] snapshotHoldings', await runSnapshotHoldings());
+    } catch (err) {
+      console.error('[boot] snapshotHoldings failed:', err);
     }
   })();
 }

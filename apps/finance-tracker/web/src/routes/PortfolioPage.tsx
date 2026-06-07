@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PortfolioPageSkeleton } from "@/routes/PortfolioPageSkeleton";
 import { PHASE_1_TILES } from "@/tiles/registry";
 import { usePortfolioData } from "@/tiles/usePortfolioData";
+import { usePortfolioHistory } from "@/tiles/usePortfolioHistory";
 
 /**
  * Default destination (M10.4) — the global dashboard surface (M9): hero summary
@@ -33,6 +34,7 @@ export function PortfolioPage() {
 
   const accountIds = activeAccount === "all" ? "all" : [activeAccount];
   const { data, isLoading } = usePortfolioData(accountIds);
+  const history = usePortfolioHistory(accountIds);
 
   // The account list comes from the same join (unscoped tab set is fine — we
   // always want every account selectable, so derive it from the "all" portfolio).
@@ -77,6 +79,7 @@ export function PortfolioPage() {
         // move. We have no daily-change baseline (no previous-close in the price
         // cache, snapshots are nightly), so label it honestly.
         periodLabel="Total return"
+        history={history.data}
       />
 
       {data.unpricedCount > 0 ? (
