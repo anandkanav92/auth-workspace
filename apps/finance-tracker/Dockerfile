@@ -4,7 +4,10 @@ WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
 COPY packages packages
 COPY apps/finance-tracker apps/finance-tracker
-RUN corepack enable && pnpm install --frozen-lockfile
+# Pin pnpm to the version that generated pnpm-lock.yaml. Without a pin, corepack
+# pulls the latest pnpm (11.x), which turns "ignored build scripts" into a hard
+# error under --frozen-lockfile (ERR_PNPM_IGNORED_BUILDS) and fails the build.
+RUN corepack enable && corepack prepare pnpm@10.33.3 --activate && pnpm install --frozen-lockfile
 # Vite inlines these at build time, so every VITE_* the web build reads
 # (grep web/src for import.meta.env.) must be declared here AND forwarded as a
 # build arg in docker-compose.yml. The optional ones can be empty.
@@ -30,18 +33,21 @@ RUN pnpm --filter finance-tracker-web build
 FROM node:24-alpine AS server-builder
 WORKDIR /app
 COPY --from=web-builder /app .
-RUN pnpm --filter finance-tracker-server build
+RUN corepack enable && corepack prepare pnpm@10.33.3 --activate && pnpm --filter finance-tracker-server build
 
-# Stage 3: runtime (production deps only — reviewer fix N7)
+# Stage 3: runtime
 FROM node:24-alpine
 WORKDIR /app
-RUN corepack enable
-COPY --from=server-builder /app/apps/finance-tracker/server/dist ./server
-COPY --from=web-builder /app/apps/finance-tracker/web/dist ./web
-COPY --from=server-builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=server-builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=server-builder /app/apps/finance-tracker/server/package.json ./server/package.json
-RUN cd server && pnpm install --prod --frozen-lockfile --ignore-scripts
+# Copy the fully-installed, built workspace as-is (server dist + web dist + the
+# pnpm node_modules symlink farm). Running the server from its real workspace
+# path keeps pnpm's symlinked module resolution intact (a relocated dist can't
+# find @hono/node-server etc.), and serveStatic locates the SPA at ../../web/dist.
+COPY --from=server-builder /app /app
+WORKDIR /app/apps/finance-tracker/server
 EXPOSE 80
 ENV PORT=80
-CMD ["node", "server/index.js"]
+# Run the TypeScript entry via tsx. The server's compiled ESM uses extensionless
+# relative imports (valid TS, but Node ESM needs .js), so `node dist/index.js`
+# fails to resolve them; tsx (esbuild-based, like the dev server) resolves them
+# correctly. The full workspace incl. tsx is present in the image.
+CMD ["npm", "start"]

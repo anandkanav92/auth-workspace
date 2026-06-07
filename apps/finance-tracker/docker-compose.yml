@@ -1,17 +1,31 @@
-# PocketBase note: finance-tracker has NO PocketBase service of its own — it
-# shares the workspace-wide PocketBase that habit-tracker operates. Our schema
-# is a set of JS migration files under server/pb-schema/migrations/ that
-# PocketBase auto-applies on boot (see server/pb-schema/README.md).
+# finance-tracker is self-contained: it ships its OWN PocketBase container
+# (the deploy box has no shared PocketBase — each app brings its own, like
+# habit-tracker and dutch-app). The two services talk over a private bridge
+# network (finance-net); only the host port mappings are exposed.
 #
-# IN PRODUCTION: whichever PocketBase container runs on the Mac Mini must mount
-# our migrations directory into its --migrationsDir so our 8 collections get
-# created alongside habit-tracker's. Add to that container's service:
-#
-#   volumes:
-#     - ../finance-tracker/server/pb-schema/migrations:/pb/pb_migrations:ro
-#
-# (adjust the host path to wherever this repo is checked out on the Mac Mini).
+# Schema is a set of JS migration files under server/pb-schema/migrations/,
+# mounted read-only into the PocketBase container and auto-applied on `serve`
+# boot (see server/pb-schema/README.md). No curl seeding needed.
 services:
+  finance-pocketbase:
+    build:
+      context: ./pb
+    ports:
+      # 8090/8091 are taken by other apps' PocketBase on the deploy box.
+      - "8092:8090"
+    volumes:
+      # Persistent DB + uploads.
+      - finance_pb_data:/pb/pb_data
+      # Our schema migrations, auto-applied on boot.
+      - ./server/pb-schema/migrations:/pb/pb_migrations:ro
+    environment:
+      # start.sh upserts this superuser; the BFF authenticates as it.
+      - PB_EMAIL=${PB_ADMIN_EMAIL}
+      - PB_PASSWORD=${PB_ADMIN_PASSWORD}
+    restart: unless-stopped
+    networks:
+      - finance-net
+
   finance-tracker:
     build:
       context: ../..
@@ -34,9 +48,15 @@ services:
       - "3110:80"
     env_file:
       - .env
+    depends_on:
+      - finance-pocketbase
     restart: unless-stopped
     networks:
-      - mac-mini-net
+      - finance-net
+
 networks:
-  mac-mini-net:
-    external: true
+  finance-net:
+    driver: bridge
+
+volumes:
+  finance_pb_data:

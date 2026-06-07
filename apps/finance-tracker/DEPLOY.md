@@ -1,24 +1,31 @@
 # Finance Tracker — Mac Mini Deployment Guide
 
-The app is a single container: a Hono BFF that serves the built React PWA and
-proxies to the **shared workspace PocketBase** (the same instance habit-tracker
-uses). There is no PocketBase service of its own — see
-[§3.5 PocketBase migrations](#35-pocketbase-migrations-shared-instance).
+The app is self-contained: two containers brought up by one `docker compose`.
+A Hono BFF serves the built React PWA and proxies to finance-tracker's **OWN
+PocketBase container** (it does NOT share a PocketBase with other apps — like
+habit-tracker and dutch-app, each app brings its own). The two containers talk
+over a private bridge network (`finance-net`). See
+[§3.5 PocketBase migrations](#35-pocketbase-migrations-own-container).
 
 - BFF container: host **3110** → container **80**
+- PocketBase container: host **8092** → container **8090** (8090/8091 are taken
+  by other apps' PocketBase on the deploy box)
 - Public URL: **https://invest.cya.run**
-- Cron (hourly prices etc.) runs **inside this container**, gated by
+- Cron (hourly prices etc.) runs **inside the BFF container**, gated by
   `CRON_ENABLED=true` — enable it on this one deployed instance only.
 
 ## Prerequisites
 
-- Mac Mini running Docker Desktop
-- The shared workspace PocketBase container already running on the
-  `mac-mini-net` Docker network (habit-tracker's deploy brings it up)
+- Deploy box running Docker (arm64 — the pb image pulls the linux_arm64
+  PocketBase build)
 - Cloudflare Tunnel (`cloudflared`) configured
-- SSH access to Mac Mini
+- SSH access to the deploy box
 - A Firebase project with Google sign-in enabled + a service-account key
 - A Finnhub API key (free tier)
+
+> No shared PocketBase or external `mac-mini-net` network is required — this
+> compose file declares its own `finance-net` bridge and a `finance_pb_data`
+> named volume.
 
 ---
 
@@ -48,8 +55,9 @@ Fill in, at minimum:
 
 | Var | Notes |
 |-----|-------|
-| `PB_URL` | Address of the shared PocketBase on `mac-mini-net`, e.g. `http://pocketbase:8090` |
-| `PB_ADMIN_TOKEN` | Long-lived PocketBase superuser token (preferred). If blank, set `PB_ADMIN_EMAIL` + `PB_ADMIN_PASSWORD` |
+| `PB_URL` | Address of finance-tracker's own PocketBase on `finance-net`: `http://finance-pocketbase:8090` (host port is 8092) |
+| `PB_ADMIN_EMAIL` + `PB_ADMIN_PASSWORD` | **Required.** The pb container seeds this superuser on boot; the BFF authenticates with the same creds |
+| `PB_ADMIN_TOKEN` | Optional long-lived superuser token. Leave **blank** for this deploy and rely on the email/password above |
 | `FIREBASE_SERVICE_ACCOUNT` | Full service-account JSON on ONE line (see §5) |
 | `FINNHUB_API_KEY` | From https://finnhub.io |
 | `CRON_ENABLED` | `true` on this instance only |
@@ -61,60 +69,68 @@ The `VITE_*` vars are inlined into the SPA at **build** time (Vite replaces
 passes them as build args; the server runtime vars are read by the container at
 start via `env_file: .env`. See `.env.example` for the complete annotated list.
 
-> **Secrets warning:** `.env` holds the PocketBase admin token, the Firebase
-> service-account JSON, and the Finnhub key. It is gitignored — never commit it.
+> **Secrets warning:** `.env` holds the PocketBase superuser credentials, the
+> Firebase service-account JSON, and the Finnhub key. It is gitignored — never
+> commit it.
 
 ---
 
-## 3. Build and start the container
+## 3. Build and start the containers
 
 ```bash
 docker compose up -d --build
 ```
 
-Verify it's running:
+This brings up **both** containers — `finance-pocketbase` and `finance-tracker`
+— on the private `finance-net` bridge. Verify they're running:
 
 ```bash
 docker compose ps
-curl -s http://localhost:3110/health      # -> {"ok":true,"ts":...}
+curl -s http://localhost:8092/api/health  # PocketBase -> {"code":200,...}
+curl -s http://localhost:3110/health      # BFF        -> {"ok":true,"ts":...}
 curl -I http://localhost:3110             # -> HTTP 200 serving the SPA
 ```
 
-On boot the logs should show:
+On boot the BFF logs should show:
 
 - `finance-tracker serving web from ...`
 - `finance-tracker BFF on :80`
 - `finance-tracker cron enabled (...)` — only when `CRON_ENABLED=true`
 
-### 3.5 PocketBase migrations (shared instance)
+### 3.5 PocketBase migrations (own container)
 
 finance-tracker ships its 8 collections as PocketBase **JS migrations** under
-`server/pb-schema/migrations/`. They are NOT bundled into this container — they
-must be applied to the shared PocketBase. PocketBase auto-applies any pending
-migrations in lexicographic order on boot, so the shared PocketBase container
-must **mount our migrations directory**. In that container's service definition:
+`server/pb-schema/migrations/`. The `finance-pocketbase` service mounts that
+directory read-only into `/pb/pb_migrations` and runs `serve` with an explicit
+`--migrationsDir`, so PocketBase **auto-applies** any pending migrations in
+lexicographic order on every boot — no curl seeding, no manual step. The mount
+is already declared in `docker-compose.yml`:
 
 ```yaml
 volumes:
-  - ~/auth-workspace/apps/finance-tracker/server/pb-schema/migrations:/pb/pb_migrations:ro
+  - finance_pb_data:/pb/pb_data
+  - ./server/pb-schema/migrations:/pb/pb_migrations:ro
 ```
 
-(Adjust the host path to wherever the repo is checked out.) Restart the
-PocketBase container after adding the mount so the migrations run. Confirm with:
+After `docker compose up -d --build`, confirm the collections exist:
 
 ```bash
-# In the PocketBase admin UI -> Collections, you should now see:
+# In the PocketBase admin UI (http://localhost:8092/_/) -> Collections, or via
+# the API, you should see:
 # accounts, holdings, transactions, imports, holdings_snapshot,
 # symbol_profiles, price_cache, fx_rates
 ```
 
-> **Cross-app warning — `/api/batch` is a GLOBAL PocketBase setting.** Migration
+When a `git pull` brings new migrations, `docker compose up -d --build`
+recreates the pb container and the new migrations auto-apply on its next boot.
+
+> **`/api/batch` is enabled on this PocketBase only.** Migration
 > `1717000005_finance_import_atomic_and_per_account_dedup.js` sets
 > `settings.batch.enabled = true` to make statement import an atomic transaction.
-> This is a workspace-wide PocketBase setting and therefore also exposes the
-> (auth-gated) `/api/batch` endpoint to **habit-tracker** on the shared instance.
-> Our admin-token BFF is the only intended client. Confirm this is acceptable
-> before the migration lands on prod — see the Pre-prod checklist below.
+> Because finance-tracker now runs its **own** PocketBase, this is no longer a
+> cross-app concern — it only affects finance-tracker's instance, and our
+> admin-authenticated BFF is the only client of the (auth-gated) `/api/batch`
+> endpoint.
 
 ---
 
@@ -179,33 +195,34 @@ Open **https://invest.cya.run** in your browser.
 
 ## 7. Backups (restic → Backblaze B2)
 
-PocketBase data (our 8 collections live in the shared SQLite DB) is covered by
-the workspace's existing nightly backup — finance-tracker's schema simply joins
-it, so there is **no new backup job to write**. For reference, that nightly cron
-snapshots the PocketBase data directory and ships it offsite with
-[`restic`](https://restic.net) to a **Backblaze B2** bucket:
+finance-tracker now has its **own** PocketBase data, persisted in the
+`finance_pb_data` named Docker volume. It is no longer part of any other app's
+data directory, so it needs its own backup. A nightly cron can snapshot the
+volume and ship it offsite with [`restic`](https://restic.net) to a
+**Backblaze B2** bucket. The data lives at the volume's mountpoint (inspect with
+`docker volume inspect finance_pb_data`); the snippet below reads it from inside
+a throwaway container so paths don't depend on the Docker storage driver:
 
 ```bash
-# Illustrative — the workspace already runs an equivalent on a nightly cron.
-export RESTIC_REPOSITORY="b2:auth-workspace-backups:pocketbase"
+export RESTIC_REPOSITORY="b2:finance-tracker-backups:pocketbase"
 export RESTIC_PASSWORD="..."                 # from the backup host's secret store
 export B2_ACCOUNT_ID="..." B2_ACCOUNT_KEY="..."
 
-restic backup /pb/pb_data                    # PocketBase data dir (DB + uploads)
+# Mount the named volume read-only and back up its contents (DB + uploads).
+docker run --rm -v finance_pb_data:/data:ro -w /data alpine \
+  tar -cf - . | restic backup --stdin --stdin-filename finance_pb_data.tar
 restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
 ```
-
-Because finance-tracker is on the **same** PocketBase data directory, no path
-change is needed — verify (don't re-implement) per the checklist below.
 
 ### Backup verification (M16.7)
 
 - [ ] After the first nightly run post-deploy, list the latest restic snapshot
-      and confirm it contains the PocketBase data dir:
-      `restic snapshots --latest 1` and `restic ls latest | grep pb_data`
+      and confirm it contains the PocketBase data:
+      `restic snapshots --latest 1` and `restic ls latest | grep finance_pb_data`
 - [ ] Spot-check that our collections are inside the snapshot's DB (a test
       restore to a scratch dir, then open the DB and confirm `accounts`,
-      `holdings`, … exist).
+      `holdings`, … exist). Migrations recreate the schema on a fresh container,
+      but the backup is what preserves the actual rows/uploads.
 
 ### Cron monitoring (M16.6)
 
@@ -227,15 +244,16 @@ repeated failure.
 To deploy new changes:
 
 ```bash
-ssh mac-mini
+ssh <deploy-box>
 cd ~/auth-workspace
 git pull
 cd apps/finance-tracker
 docker compose up -d --build
 ```
 
-If the pull includes new PocketBase migrations, restart the **shared
-PocketBase** container too (it auto-applies pending migrations on boot).
+This recreates both containers. If the pull includes new PocketBase migrations,
+they auto-apply on the `finance-pocketbase` container's next boot (the migrations
+dir is mounted into it) — no separate step needed.
 
 ---
 
@@ -244,11 +262,12 @@ PocketBase** container too (it auto-applies pending migrations on boot).
 | Issue | Fix |
 |-------|-----|
 | Google sign-in fails | Check `invest.cya.run` is in Firebase authorized domains (§5) |
-| 401 on every `/api/*` | `FIREBASE_SERVICE_ACCOUNT` missing/malformed, or clock skew on the Mini |
-| Container won't start | `docker compose logs`; check `.env` has `PB_URL` + PocketBase admin auth + `FIREBASE_SERVICE_ACCOUNT` |
+| 401 on every `/api/*` | `FIREBASE_SERVICE_ACCOUNT` missing/malformed, or clock skew on the deploy box |
+| BFF won't start | `docker compose logs finance-tracker`; check `.env` has `PB_URL` + PocketBase admin auth + `FIREBASE_SERVICE_ACCOUNT` |
 | `Set PB_ADMIN_TOKEN, or PB_ADMIN_EMAIL+PB_ADMIN_PASSWORD` on boot | PocketBase admin auth not set in `.env` |
-| Import returns 403 "Batch requests are not allowed" | Migration `…0005…` hasn't applied — confirm the shared PocketBase mounts our `migrations/` dir and was restarted (§3.5) |
-| Collections missing in PocketBase | Migrations not mounted/applied on the shared PocketBase (§3.5) |
+| pb container won't start / no superuser | `docker compose logs finance-pocketbase`; `PB_ADMIN_EMAIL`/`PB_ADMIN_PASSWORD` must be set (start.sh upserts the superuser from them) |
+| Import returns 403 "Batch requests are not allowed" | Migration `…0005…` hasn't applied — `docker compose logs finance-pocketbase` for migration errors, then recreate the pb container (§3.5) |
+| Collections missing in PocketBase | Migrations not applied — check `finance-pocketbase` logs; the `migrations/` mount is declared in compose (§3.5) |
 | Prices never refresh | `CRON_ENABLED` not `true`, or check logs for `cron enabled` + cron monitor (§7) |
 | Site not reachable | Check tunnel config; verify `curl http://localhost:3110/health` works locally |
 | Stale build / old Firebase config | `VITE_*` are baked at build time — `docker compose build --no-cache` after editing them |
@@ -270,8 +289,8 @@ Resolve before relying on this in production:
       placeholders from `web/scripts/gen-icons.mjs`. Swap in real artwork at the
       same filenames/sizes (192, 512, maskable-512, 180 apple-touch-icon) and
       rebuild. See `web/PWA-NOTES.md`.
-- [ ] **Confirm `/api/batch` global enable is acceptable** — migration `…0005…`
-      flips `batch.enabled` on the shared PocketBase, which also affects
-      habit-tracker (§3.5). Sign off that this is acceptable.
+- [ ] ~~Confirm `/api/batch` global enable is acceptable~~ — no longer a concern:
+      finance-tracker runs its own PocketBase, so migration `…0005…` enabling
+      `batch.enabled` affects only finance-tracker's instance (§3.5).
 - [ ] **Lighthouse ≥ 90 (PWA + Performance)** — manual check against a prod
       build (`pnpm --filter finance-tracker-web preview`), per `web/PWA-NOTES.md`.

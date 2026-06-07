@@ -5,5 +5,11 @@
     "dev": "pnpm --parallel -r dev",
     "build": "pnpm --filter @myorg/auth-google build",
     "typecheck": "pnpm -r typecheck"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^19",
+      "@types/react-dom": "^19"
+    }
   }
 }
