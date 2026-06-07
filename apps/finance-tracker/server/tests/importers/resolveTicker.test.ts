@@ -139,4 +139,46 @@ describe('resolveTickerWith', () => {
     expect(ticker).toBe('AAPL');
     expect(deps.search).not.toHaveBeenCalled();
   });
+
+  // --- constructed-symbol fallback (Yahoo ISIN search returns nothing) -------
+
+  it('constructs <symbol>.L when ISIN search yields no hits (GBP gold ETC)', async () => {
+    // Live behaviour: search('IE00B4ND3602') returns []. The real listing is
+    // SGLN.L (GBp); bare "SGLN" is a US penny stock. We must construct SGLN.L.
+    const deps = makeDeps({
+      byIsin: async () => null,
+      search: async () => [],
+      profile: async (t) =>
+        t === 'SGLN.L'
+          ? { ...FULL_PROFILE, ticker: 'SGLN.L', listingCurrency: 'GBp' }
+          : null,
+    });
+    const ticker = await resolveTickerWith('IE00B4ND3602', 'SGLN', deps, 'GBP');
+    expect(ticker).toBe('SGLN.L');
+    expect(deps.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('probes EUR venues in order until one trades in EUR (IWDE.AS)', async () => {
+    const deps = makeDeps({
+      byIsin: async () => null,
+      search: async () => [],
+      profile: async (t) =>
+        t === 'IWDE.AS'
+          ? { ...FULL_PROFILE, ticker: 'IWDE.AS', listingCurrency: 'EUR' }
+          : null,
+    });
+    const ticker = await resolveTickerWith('IE00B441G979', 'IWDE', deps, 'EUR');
+    expect(ticker).toBe('IWDE.AS');
+  });
+
+  it('falls back to the broker symbol when no constructed candidate validates', async () => {
+    const deps = makeDeps({
+      byIsin: async () => null,
+      search: async () => [],
+      profile: async () => null, // nothing trades anywhere
+    });
+    const ticker = await resolveTickerWith('IE00B4ND3602', 'SGLN', deps, 'GBP');
+    expect(ticker).toBe('SGLN');
+    expect(deps.upsert).not.toHaveBeenCalled();
+  });
 });

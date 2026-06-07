@@ -63,17 +63,62 @@ export async function resolveTickerWith(
   // 2. Cache miss / currency mismatch → discover via Yahoo's ISIN search and
   //    pick the listing that best matches the broker symbol + expected currency.
   const hits = await deps.provider.search(isin).catch(() => []);
-  const ticker = pickHit(hits, brokerSymbol, want)?.ticker;
-  if (!ticker) return brokerSymbol; // 3. unresolved — fall back.
+  let ticker = pickHit(hits, brokerSymbol, want)?.ticker;
+  let profile = ticker
+    ? await deps.provider.profile(ticker).catch(() => null)
+    : null;
+
+  // 3. Validate against the statement currency. Yahoo's ISIN search is patchy —
+  //    it returns NOTHING for many ETC/ETF ISINs (the gold ETC IE00B4ND3602, the
+  //    EUR-hedged world ETF IE00B441G979) and a same-named US PENNY STOCK for
+  //    others ("SGLN" → SurgLine, $0.0001). When the picked hit can't be
+  //    confirmed in the right currency, probe symbols CONSTRUCTED from the broker
+  //    symbol + the venue for that currency (SGLN+GBP → SGLN.L) and keep the
+  //    first whose listing currency actually matches.
+  if (want && !currencyMatches(profile?.listingCurrency, want)) {
+    const probed = await probeConstructed(brokerSymbol, want, deps.provider);
+    if (probed) {
+      ticker = probed.ticker;
+      profile = probed.profile;
+    }
+  }
+
+  if (!ticker) return brokerSymbol; // 4. unresolved — fall back.
 
   // Enrich + cache the profile so future imports/tiles skip the network. A
   // failed enrichment must not fail the import, so we still return the ticker.
-  const profile = await deps.provider.profile(ticker).catch(() => null);
   await deps.profiles
     .upsert(toCreate(ticker, isin, profile))
     .catch(() => undefined);
 
   return ticker;
+}
+
+/** Yahoo exchange suffixes to try for each currency, most-likely first. */
+const CURRENCY_SUFFIXES: Record<string, string[]> = {
+  GBP: ['.L'],
+  USD: ['', '.L'], // bare US listing, or a USD line on the LSE (e.g. IGLN.L)
+  EUR: ['.AS', '.DE', '.MI', '.PA', '.F'],
+};
+
+/**
+ * Probe symbols built from `brokerSymbol` + each candidate venue suffix and
+ * return the first whose fetched profile actually trades in `want`. Best-effort;
+ * returns null if none validate (caller then falls back to the broker symbol).
+ */
+async function probeConstructed(
+  brokerSymbol: string,
+  want: string,
+  provider: Pick<PriceProvider, 'profile'>,
+): Promise<{ ticker: string; profile: ProviderProfile } | null> {
+  for (const suffix of CURRENCY_SUFFIXES[want] ?? ['']) {
+    const candidate = brokerSymbol + suffix;
+    const profile = await provider.profile(candidate).catch(() => null);
+    if (profile && normalizeCurrencyCode(profile.listingCurrency) === want) {
+      return { ticker: candidate, profile };
+    }
+  }
+  return null;
 }
 
 /** True when no currency expectation, or the (normalised) listing matches it. */
