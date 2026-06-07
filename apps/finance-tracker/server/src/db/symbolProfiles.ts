@@ -27,6 +27,26 @@ export class SymbolProfilesRepo extends SharedRepo<
       .getFirstListItem<SymbolProfile>(filter)
       .catch(() => null);
   }
+
+  /**
+   * Substring search over the cached profiles by ticker OR name (case-insensitive
+   * `~` contains). Powers the M7 `/api/search` cache-first lookup. Uses
+   * PocketBase's PARAMETERIZED filter binding — the same `{:q}` value is bound
+   * into both clauses, so a hostile query can never break out of the filter.
+   *
+   * @param query the user's search string (already trimmed by the caller).
+   * @param limit max rows to return (default 10, matching the provider chain).
+   */
+  async search(query: string, limit = 10): Promise<SymbolProfile[]> {
+    if (!query) return [];
+    const pb = await pbAdmin();
+    const filter = pb.filter('ticker ~ {:q} || name ~ {:q}', { q: query });
+    const page = await pb
+      .collection('symbol_profiles')
+      .getList<SymbolProfile>(1, limit, { filter })
+      .catch(() => null);
+    return page?.items ?? [];
+  }
 }
 
 export const symbolProfilesRepo = new SymbolProfilesRepo();
