@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { formatEur, formatPct } from "@/lib/format";
 
 import { computeIncome } from "./incomeMath";
@@ -35,9 +36,11 @@ export function Income({ accountIds }: TileProps) {
       ) : (
         <div>
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-2xl font-semibold tabular-nums text-fg">
-              {formatEur(result.expectedAnnualEur)}
-            </span>
+            <AnimatedNumber
+              value={result.expectedAnnualEur}
+              format={formatEur}
+              className="text-2xl font-semibold tabular-nums text-fg"
+            />
             <span className="text-sm tabular-nums text-muted">
               {formatPct(result.weightedYield).replace("+", "")} yield
             </span>
