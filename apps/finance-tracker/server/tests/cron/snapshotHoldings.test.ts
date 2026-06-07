@@ -63,7 +63,7 @@ function makeDeps(overrides: {
     holdings: { listAllOpen: vi.fn(async () => overrides.open ?? []) } as never,
     snapshots: { listAllByDateRange, create } as never,
     priceCache: { list: vi.fn(async () => overrides.prices ?? []) } as never,
-    fxRates: { get: vi.fn(async () => fxRow) } as never,
+    fxRates: { getLatest: vi.fn(async () => fxRow) } as never,
     now: overrides.now ?? (() => new Date('2026-06-01T01:00:00Z')),
     create,
     listAllByDateRange,
@@ -137,14 +137,15 @@ describe('runSnapshotHoldingsWith', () => {
     expect(res.inserted).toBe(1);
   });
 
-  it('an unpriced holding is snapshotted with eur_value 0 and counted', async () => {
+  it('an unpriced holding is SKIPPED, not written as 0 (required eur_value rejects 0)', async () => {
     const deps = makeDeps({
       open: [holding({ ticker: 'XYZ', quantity: 5 })],
-      prices: [], // no cached price
+      prices: [], // no cached price → value 0 → skip
     });
     const res = await runSnapshotHoldingsWith(deps);
     expect(res.unpriced).toBe(1);
-    expect((deps.create.mock.calls[0][0] as HoldingsSnapshotCreate).eur_value).toBe(0);
+    expect(res.inserted).toBe(0);
+    expect(deps.create).not.toHaveBeenCalled();
   });
 
   it('a per-holding insert failure does not abort the batch', async () => {
