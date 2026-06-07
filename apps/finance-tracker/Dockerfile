@@ -35,16 +35,15 @@ WORKDIR /app
 COPY --from=web-builder /app .
 RUN corepack enable && corepack prepare pnpm@10.33.3 --activate && pnpm --filter finance-tracker-server build
 
-# Stage 3: runtime (production deps only — reviewer fix N7)
+# Stage 3: runtime
 FROM node:24-alpine
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@10.33.3 --activate
-COPY --from=server-builder /app/apps/finance-tracker/server/dist ./server
-COPY --from=web-builder /app/apps/finance-tracker/web/dist ./web
-COPY --from=server-builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=server-builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=server-builder /app/apps/finance-tracker/server/package.json ./server/package.json
-RUN cd server && pnpm install --prod --frozen-lockfile --ignore-scripts
+# Copy the fully-installed, built workspace as-is (server dist + web dist + the
+# pnpm node_modules symlink farm). Running the server from its real workspace
+# path keeps pnpm's symlinked module resolution intact (a relocated dist can't
+# find @hono/node-server etc.), and serveStatic locates the SPA at ../../web/dist.
+COPY --from=server-builder /app /app
+WORKDIR /app/apps/finance-tracker/server
 EXPOSE 80
 ENV PORT=80
-CMD ["node", "server/index.js"]
+CMD ["node", "dist/index.js"]
