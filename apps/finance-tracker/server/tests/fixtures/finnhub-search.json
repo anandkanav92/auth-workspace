@@ -1,0 +1,17 @@
+{
+  "count": 2,
+  "result": [
+    {
+      "description": "APPLE INC",
+      "displaySymbol": "AAPL",
+      "symbol": "AAPL",
+      "type": "Common Stock"
+    },
+    {
+      "description": "APPLE INC - CDR",
+      "displaySymbol": "AAPL.NE",
+      "symbol": "AAPL.NE",
+      "type": "Common Stock"
+    }
+  ]
+}

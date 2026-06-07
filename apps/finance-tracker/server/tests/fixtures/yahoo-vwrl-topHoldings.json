@@ -1,0 +1,110 @@
+{
+  "topHoldings": {
+    "maxAge": 1,
+    "cashPosition": 0,
+    "stockPosition": 0.9995,
+    "bondPosition": 0,
+    "otherPosition": 0.00029999999,
+    "preferredPosition": 0.0001,
+    "convertiblePosition": 0,
+    "holdings": [
+      {
+        "symbol": "NVDA",
+        "holdingName": "NVIDIA Corp",
+        "holdingPercent": 0.046616804
+      },
+      {
+        "symbol": "AAPL",
+        "holdingName": "Apple Inc",
+        "holdingPercent": 0.0390038
+      },
+      {
+        "symbol": "MSFT",
+        "holdingName": "Microsoft Corp",
+        "holdingPercent": 0.0301713
+      },
+      {
+        "symbol": "AMZN",
+        "holdingName": "Amazon.com Inc",
+        "holdingPercent": 0.0253761
+      },
+      {
+        "symbol": "GOOGL",
+        "holdingName": "Alphabet Inc Class A",
+        "holdingPercent": 0.0223026
+      },
+      {
+        "symbol": "AVGO",
+        "holdingName": "Broadcom Inc",
+        "holdingPercent": 0.019245699
+      },
+      {
+        "symbol": "GOOG",
+        "holdingName": "Alphabet Inc Class C",
+        "holdingPercent": 0.0180584
+      },
+      {
+        "symbol": "2330.TW",
+        "holdingName": "Taiwan Semiconductor Manufacturing Co Ltd",
+        "holdingPercent": 0.0163421
+      },
+      {
+        "symbol": "META",
+        "holdingName": "Meta Platforms Inc Class A",
+        "holdingPercent": 0.0133390995
+      },
+      {
+        "symbol": "TSLA",
+        "holdingName": "Tesla Inc",
+        "holdingPercent": 0.010747
+      }
+    ],
+    "equityHoldings": {
+      "priceToEarnings": 0.04407,
+      "priceToBook": 0.29828,
+      "priceToSales": 0.3775,
+      "priceToCashflow": 0.06276
+    },
+    "bondHoldings": {},
+    "bondRatings": [
+      {
+        "us_government": 0
+      }
+    ],
+    "sectorWeightings": [
+      {
+        "realestate": 0.019199999
+      },
+      {
+        "consumer_cyclical": 0.0943
+      },
+      {
+        "basic_materials": 0.038399998
+      },
+      {
+        "consumer_defensive": 0.0495
+      },
+      {
+        "technology": 0.2901
+      },
+      {
+        "communication_services": 0.088199995
+      },
+      {
+        "financial_services": 0.161
+      },
+      {
+        "utilities": 0.026800001
+      },
+      {
+        "industrials": 0.1104
+      },
+      {
+        "energy": 0.0421
+      },
+      {
+        "healthcare": 0.0801
+      }
+    ]
+  }
+}
