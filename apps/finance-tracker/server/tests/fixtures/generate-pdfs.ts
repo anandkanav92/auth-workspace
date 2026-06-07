@@ -22,8 +22,10 @@ import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib'
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 // pdf-lib's y origin is bottom-left (same as pdf.js user-space), so the y values
-// here map directly to the coordinates the parser reads back.
-const PAGE_W = 595; // A4-ish points
+// here map directly to the coordinates the parser reads back. The real T212
+// statement is a wide landscape page whose right-most columns sit near x=813, so
+// the page MUST be wider than that or pdf-lib silently clips off-page text.
+const PAGE_W = 850; // wide enough for the right-most VALUE (EUR) column (~x=813)
 const PAGE_H = 842;
 const FONT_SIZE = 7;
 
