@@ -12,6 +12,7 @@
 // so a hostile pbUserId value cannot break out of the filter.
 
 import type PocketBase from 'pocketbase';
+import type { ListResult } from 'pocketbase';
 import { pbAdmin } from '../lib/pb';
 
 export class PerUserRepo<
@@ -31,6 +32,53 @@ export class PerUserRepo<
     const pb = await this.pb();
     const filter = pb.filter('user = {:userId}', { userId: pbUserId });
     return pb.collection(this.collection).getFullList<TRecord>({ filter });
+  }
+
+  /**
+   * List rows owned by `pbUserId` that match an extra, optionally-bound filter
+   * fragment. The fragment is ANDed onto the mandatory `user = {:userId}` scope
+   * and bound via PocketBase's PARAMETERIZED filter (never string interpolation)
+   * so caller-supplied values cannot break out of the filter. Pass `sort` to
+   * order results (e.g. '-occurred_at').
+   */
+  protected async listWhere(
+    pbUserId: string,
+    extra?: { fragment: string; params: Record<string, unknown> },
+    sort?: string,
+  ): Promise<TRecord[]> {
+    const pb = await this.pb();
+    const filter = extra
+      ? pb.filter(`user = {:userId} && ${extra.fragment}`, {
+          userId: pbUserId,
+          ...extra.params,
+        })
+      : pb.filter('user = {:userId}', { userId: pbUserId });
+    return pb
+      .collection(this.collection)
+      .getFullList<TRecord>(sort ? { filter, sort } : { filter });
+  }
+
+  /**
+   * Paged variant of {@link listWhere}. Returns PocketBase's ListResult so the
+   * route can surface page/perPage/totalItems/totalPages to the client.
+   */
+  protected async listPagedWhere(
+    pbUserId: string,
+    page: number,
+    perPage: number,
+    extra?: { fragment: string; params: Record<string, unknown> },
+    sort?: string,
+  ): Promise<ListResult<TRecord>> {
+    const pb = await this.pb();
+    const filter = extra
+      ? pb.filter(`user = {:userId} && ${extra.fragment}`, {
+          userId: pbUserId,
+          ...extra.params,
+        })
+      : pb.filter('user = {:userId}', { userId: pbUserId });
+    return pb
+      .collection(this.collection)
+      .getList<TRecord>(page, perPage, sort ? { filter, sort } : { filter });
   }
 
   /** Fetch a single row by id. */

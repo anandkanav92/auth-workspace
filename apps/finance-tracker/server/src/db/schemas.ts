@@ -98,7 +98,9 @@ export const transactionSchema = z.object({
   type: transactionTypeEnum,
   ticker: z.string().min(1),
   quantity: z.number(),
-  price: z.number(),
+  // price is optional: adjustments / zero-cost imports carry no per-share price
+  // (migration 1717000004 relaxed the PB field). buys/sells always set it.
+  price: z.number().optional(),
   currency: z.string().min(1),
   fee: z.number().optional(),
   occurred_at: z.string(),
@@ -113,7 +115,7 @@ export const transactionCreateSchema = z.object({
   type: transactionTypeEnum,
   ticker: z.string().min(1),
   quantity: z.number(),
-  price: z.number(),
+  price: z.number().optional(),
   currency: z.string().min(1),
   fee: z.number().optional(),
   occurred_at: z.string().min(1),
