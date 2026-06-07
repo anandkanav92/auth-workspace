@@ -25,6 +25,46 @@ export const DIVERSIFIED = "Multiple/Diversified";
 
 export type AllocationDimension = "sector" | "country" | "currency";
 
+/**
+ * Canonical, human-readable sector labels keyed by a normalised form
+ * (lower-cased, separators stripped). Sector data arrives in TWO shapes that
+ * must collapse onto ONE label, or the donut shows duplicate slices:
+ *   - individual stocks → Yahoo `assetProfile.sector`, Title Case + spaces
+ *     ("Financial Services")
+ *   - ETF look-through  → Yahoo `topHoldings.sectorWeightings`, lower snake_case
+ *     ("financial_services")
+ */
+const SECTOR_LABELS: Record<string, string> = {
+  technology: "Technology",
+  communicationservices: "Communication Services",
+  financialservices: "Financial Services",
+  consumercyclical: "Consumer Cyclical",
+  consumerdefensive: "Consumer Defensive",
+  basicmaterials: "Basic Materials",
+  realestate: "Real Estate",
+  utilities: "Utilities",
+  industrials: "Industrials",
+  energy: "Energy",
+  healthcare: "Healthcare",
+};
+
+/** Title-case an unknown sector token ("some_sector" → "Some Sector"). */
+function titleCase(raw: string): string {
+  return raw
+    .replace(/[_\s]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Map any sector spelling (stock Title Case OR ETF snake_case) to ONE canonical
+ * display label, so "technology" and "Technology" become a single slice.
+ */
+export function normalizeSector(raw: string): string {
+  const key = raw.toLowerCase().replace(/[_\s]+/g, "");
+  return SECTOR_LABELS[key] ?? titleCase(raw);
+}
+
 /** One slice of an allocation breakdown. */
 export interface AllocationSlice {
   name: string;
@@ -52,13 +92,13 @@ export function allocateBySector(positions: Position[]): AllocationSlice[] {
       const total = Object.values(weightings).reduce((s, w) => s + w, 0);
       if (total > 0) {
         for (const [sector, weight] of Object.entries(weightings)) {
-          add(map, sector, p.valueEur * (weight / total));
+          add(map, normalizeSector(sector), p.valueEur * (weight / total));
         }
         continue;
       }
     }
     if (p.sector) {
-      add(map, p.sector, p.valueEur);
+      add(map, normalizeSector(p.sector), p.valueEur);
     } else {
       add(map, UNCATEGORISED, p.valueEur);
     }

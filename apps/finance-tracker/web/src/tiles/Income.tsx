@@ -28,7 +28,7 @@ export function Income({ accountIds }: TileProps) {
     result != null && result.coveredFraction < 0.999;
 
   return (
-    <TileCard title="Income">
+    <TileCard title="Income" infoHash="income">
       {isLoading ? (
         <TileSkeleton />
       ) : !hasData ? (

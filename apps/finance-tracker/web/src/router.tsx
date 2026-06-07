@@ -12,6 +12,7 @@ import { TilesPreview } from "@/dev/TilesPreview";
 import { AccountHoldingsPage } from "@/routes/AccountHoldingsPage";
 import { AccountPage } from "@/routes/AccountPage";
 import { ImportPage } from "@/routes/ImportPage";
+import { LearnPage } from "@/routes/LearnPage";
 import { PortfolioPage } from "@/routes/PortfolioPage";
 import { SettingsPage } from "@/routes/SettingsPage";
 
@@ -88,6 +89,12 @@ const importRoute = createRoute({
   component: ImportPage,
 });
 
+const learnRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/learn",
+  component: LearnPage,
+});
+
 // Dev-only visual QA surface. Lives outside the AppLayout shell on purpose — it
 // renders its own forced light/dark panels.
 const devLayoutRoute = createRoute({
@@ -112,6 +119,7 @@ const routeTree = rootRoute.addChildren([
     accountHoldingsRoute,
     settingsRoute,
     importRoute,
+    learnRoute,
   ]),
   devLayoutRoute,
   devTilesRoute,

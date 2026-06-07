@@ -4,6 +4,7 @@ import {
   allocateBySector,
   allocateByCountry,
   allocateByCurrency,
+  normalizeSector,
   DIVERSIFIED,
   UNCATEGORISED,
 } from "@/tiles/allocationMath";
@@ -94,6 +95,42 @@ describe("allocateBySector (ETF look-through)", () => {
     const orphan = pos({ ticker: "?", valueEur: 300, assetType: "other" });
     const slices = allocateBySector([orphan]);
     expect(slices).toEqual([{ name: UNCATEGORISED, valueEur: 300 }]);
+  });
+
+  it("merges ETF snake_case sectors with stock Title Case sectors (real Yahoo shapes)", () => {
+    // Bug: stocks report "Financial Services"; ETF look-through reports
+    // "financial_services" — they MUST collapse onto one slice, not three.
+    const stock = pos({
+      ticker: "JPM",
+      valueEur: 1000,
+      assetType: "stock",
+      sector: "Financial Services",
+    });
+    const etf = pos({
+      ticker: "VWRL",
+      valueEur: 1000,
+      assetType: "etf",
+      sectorWeightings: { technology: 0.5, financial_services: 0.5 },
+    });
+    const byName = new Map(allocateBySector([stock, etf]).map((s) => [s.name, s.valueEur]));
+    expect(byName.get("Financial Services")).toBeCloseTo(1500, 6); // 1000 stock + 500 ETF
+    expect(byName.get("Technology")).toBeCloseTo(500, 6);
+    // No raw lower/snake_case slices leak through.
+    expect(byName.has("financial_services")).toBe(false);
+    expect(byName.has("technology")).toBe(false);
+  });
+});
+
+describe("normalizeSector", () => {
+  it("collapses snake_case, Title Case, and spacing onto one canonical label", () => {
+    expect(normalizeSector("technology")).toBe("Technology");
+    expect(normalizeSector("Technology")).toBe("Technology");
+    expect(normalizeSector("financial_services")).toBe("Financial Services");
+    expect(normalizeSector("Financial Services")).toBe("Financial Services");
+    expect(normalizeSector("realestate")).toBe("Real Estate");
+  });
+  it("title-cases an unknown sector token rather than echoing snake_case", () => {
+    expect(normalizeSector("some_new_sector")).toBe("Some New Sector");
   });
 });
 

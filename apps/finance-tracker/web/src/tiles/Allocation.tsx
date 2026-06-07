@@ -51,6 +51,22 @@ export function Allocation({ accountIds }: TileProps) {
     [slices],
   );
 
+  // Keep the legend bounded (and the card from overflowing): show the top 5
+  // slices, then roll the rest into one "Other (n)" row. The donut still renders
+  // every slice — only the legend is summarised.
+  const legend = useMemo(() => {
+    if (slices.length <= 6) return slices;
+    const rest = slices.slice(5);
+    return [
+      ...slices.slice(0, 5),
+      {
+        name: `Other (${rest.length})`,
+        valueEur: rest.reduce((s, x) => s + x.valueEur, 0),
+      },
+    ];
+  }, [slices]);
+  const OTHER_COLOR = "#94a3b8"; // slate — distinct from the categorical palette
+
   const option: EChartsOption = useMemo(
     () => ({
       color: PALETTE,
@@ -77,6 +93,7 @@ export function Allocation({ accountIds }: TileProps) {
   return (
     <TileCard
       title="Allocation"
+      infoHash="allocation"
       action={
         <div className="flex gap-1" role="tablist" aria-label="Allocation dimension">
           {TABS.map((t) => (
@@ -107,24 +124,31 @@ export function Allocation({ accountIds }: TileProps) {
         <div>
           <LazyChart option={option} ariaLabel={`Allocation by ${dimension}`} />
           <ul className="mt-3 space-y-1.5">
-            {slices.slice(0, 6).map((s, i) => (
-              <li
-                key={s.name}
-                className="flex items-center justify-between gap-2 text-sm"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: PALETTE[i % PALETTE.length] }}
-                    aria-hidden
-                  />
-                  <span className="truncate text-fg">{s.name}</span>
-                </span>
-                <span className="shrink-0 tabular-nums text-muted">
-                  {formatPct(total > 0 ? s.valueEur / total : 0)}
-                </span>
-              </li>
-            ))}
+            {legend.map((s, i) => {
+              const isOther = i === 5 && slices.length > 6;
+              return (
+                <li
+                  key={s.name}
+                  className="flex items-center justify-between gap-2 text-sm"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor: isOther
+                          ? OTHER_COLOR
+                          : PALETTE[i % PALETTE.length],
+                      }}
+                      aria-hidden
+                    />
+                    <span className="truncate text-fg">{s.name}</span>
+                  </span>
+                  <span className="shrink-0 tabular-nums text-muted">
+                    {formatPct(total > 0 ? s.valueEur / total : 0)}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

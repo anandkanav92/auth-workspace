@@ -64,7 +64,7 @@ export function Treemap({ accountIds }: TileProps) {
   );
 
   return (
-    <TileCard title="Heatmap">
+    <TileCard title="Heatmap" infoHash="concentration">
       {isLoading ? (
         <TileSkeleton />
       ) : nodes.length === 0 ? (

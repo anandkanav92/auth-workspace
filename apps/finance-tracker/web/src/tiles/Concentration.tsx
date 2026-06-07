@@ -26,7 +26,7 @@ export function Concentration({ accountIds }: TileProps) {
   const maxShare = result?.top[0]?.share ?? 0;
 
   return (
-    <TileCard title="Top 5">
+    <TileCard title="Top 5" infoHash="concentration">
       {isLoading ? (
         <TileSkeleton />
       ) : !result || result.top.length === 0 ? (

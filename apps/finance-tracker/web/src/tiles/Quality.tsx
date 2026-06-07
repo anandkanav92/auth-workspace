@@ -43,7 +43,7 @@ export function Quality({ accountIds }: TileProps) {
     (result.weightedPe !== null || result.weightedBeta !== null);
 
   return (
-    <TileCard title="Quality">
+    <TileCard title="Quality" infoHash="quality">
       {isLoading ? (
         <TileSkeleton />
       ) : !hasData ? (

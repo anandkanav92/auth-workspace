@@ -114,7 +114,7 @@ export function DiversificationScore({ accountIds }: TileProps) {
       : (scores?.effectiveN ?? 0).toFixed(1);
 
   return (
-    <TileCard title="Diversification">
+    <TileCard title="Diversification" infoHash="diversification">
       {isLoading ? (
         <TileSkeleton />
       ) : !scores || scores.positionCount === 0 ? (
