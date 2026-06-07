@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -45,6 +45,16 @@ export function ImportPage() {
   const [preview, setPreview] = useState<UploadPreview | null>(null);
   const [duplicate, setDuplicate] = useState<AlreadyImportedBody | null>(null);
 
+  // Auto-select when there's exactly one account, so the upload zone is usable
+  // immediately (e.g. right after creating your first account) instead of being
+  // a silently-disabled dropzone with nothing to pick.
+  useEffect(() => {
+    const list = accountsQuery.data ?? [];
+    if (!selectedAccountId && list.length === 1) {
+      setSelectedAccountId(list[0].id);
+    }
+  }, [accountsQuery.data, selectedAccountId]);
+
   function reset() {
     setStage("idle");
     setPreview(null);
@@ -52,7 +62,11 @@ export function ImportPage() {
 
   async function handleFile(file: File) {
     if (!selectedAccountId) {
-      toast.error("Pick an account to import into first.");
+      toast.error(
+        (accountsQuery.data?.length ?? 0) === 0
+          ? 'Create an account first — use "New account" above — then upload.'
+          : "Select an account above first.",
+      );
       return;
     }
     setStage("uploading");
@@ -145,12 +159,17 @@ export function ImportPage() {
           {stage === "uploading" ? (
             <UploadSkeleton />
           ) : (
-            <Dropzone onFile={handleFile} disabled={!selectedAccountId} />
+            // Always interactive: tapping opens the file picker, and handleFile
+            // gives clear, contextual guidance if no account is chosen yet —
+            // never a silent, do-nothing click.
+            <Dropzone onFile={handleFile} />
           )}
 
-          {!selectedAccountId && (accountsQuery.data?.length ?? 0) > 0 && (
+          {!selectedAccountId && (
             <p className="text-xs text-muted">
-              Select an account above to enable the upload.
+              {(accountsQuery.data?.length ?? 0) === 0
+                ? 'Create an account above (use "New account") to start importing.'
+                : "Select an account above to enable the upload."}
             </p>
           )}
         </div>
