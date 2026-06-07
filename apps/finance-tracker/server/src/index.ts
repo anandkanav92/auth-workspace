@@ -66,3 +66,15 @@ if (webRoot) {
 const port = Number(process.env.PORT) || 3110;
 serve({ fetch: app.fetch, port });
 console.log(`finance-tracker BFF on :${port}`);
+
+// --- Background cron jobs (M8) ---------------------------------------------
+// Gated by CRON_ENABLED so tests and `pnpm dev` never auto-run real network
+// jobs; only the production container sets CRON_ENABLED=true. Jobs schedule in
+// Europe/Amsterdam and are idempotent across reruns/restarts.
+if (process.env.CRON_ENABLED === 'true') {
+  const { startCron, CRON_JOBS } = await import('./cron/index');
+  startCron();
+  console.log(
+    `finance-tracker cron enabled (${CRON_JOBS.map((j) => j.name).join(', ')})`,
+  );
+}
