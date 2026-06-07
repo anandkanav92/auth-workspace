@@ -61,9 +61,9 @@ export async function resolveTickerWith(
   }
 
   // 2. Cache miss / currency mismatch → discover via Yahoo's ISIN search and
-  //    pick the listing whose venue matches the expected currency.
+  //    pick the listing that best matches the broker symbol + expected currency.
   const hits = await deps.provider.search(isin).catch(() => []);
-  const ticker = pickHit(hits, want)?.ticker;
+  const ticker = pickHit(hits, brokerSymbol, want)?.ticker;
   if (!ticker) return brokerSymbol; // 3. unresolved — fall back.
 
   // Enrich + cache the profile so future imports/tiles skip the network. A
@@ -86,17 +86,36 @@ function currencyMatches(
 }
 
 /**
- * Choose the search hit whose venue best matches the expected currency. With no
- * expectation (or no venue match) we keep Yahoo's first hit — the previous
- * behaviour — so this is strictly safer, never worse.
+ * Choose the best search hit, in priority order:
+ *   1. matches the broker symbol AND the expected currency's venue
+ *   2. matches the broker symbol (it's what the user actually holds — strongest
+ *      signal, and the only way to tell apart same-ISIN lines that share a suffix,
+ *      e.g. IGLN.L (USD) vs SGLN.L (GBp), since search hits carry no currency)
+ *   3. matches the expected currency's venue
+ *   4. Yahoo's first hit (the previous behaviour — strictly a safe fallback)
+ *
+ * A hit "matches the broker symbol" when its ticker equals the symbol or is that
+ * symbol plus an exchange suffix (SGLN → SGLN.L).
  */
 function pickHit(
   hits: SearchResult[],
+  brokerSymbol: string,
   want: string | undefined,
 ): SearchResult | undefined {
   if (hits.length === 0) return undefined;
-  if (!want) return hits[0];
-  return hits.find((h) => venueMatchesCurrency(h, want)) ?? hits[0];
+  const sym = brokerSymbol.toUpperCase();
+  const symMatch = (h: SearchResult) => {
+    const t = h.ticker.toUpperCase();
+    return t === sym || t.startsWith(sym + '.');
+  };
+  const venueMatch = (h: SearchResult) =>
+    want ? venueMatchesCurrency(h, want) : false;
+  return (
+    hits.find((h) => symMatch(h) && venueMatch(h)) ??
+    hits.find((h) => symMatch(h)) ??
+    hits.find((h) => venueMatch(h)) ??
+    hits[0]
+  );
 }
 
 /**

@@ -116,6 +116,21 @@ describe('resolveTickerWith', () => {
     expect(deps.search).toHaveBeenCalled(); // cache was rejected → searched
   });
 
+  it('matches the broker symbol for a USD-denominated .L listing (IGLN.L, not a bare US hit)', async () => {
+    // IGLN.L is USD but trades on the LSE with a ".L" suffix — the no-dot "USD"
+    // venue rule alone would reject it, so the broker symbol must win.
+    const deps = makeDeps({
+      byIsin: async () => null,
+      search: async () => [
+        { ticker: 'SGLN', name: 'US OTC junk', exchange: 'PNK' },
+        { ticker: 'IGLN.L', name: 'iShares Physical Gold USD', exchange: 'LSE' },
+      ],
+      profile: async () => ({ ...FULL_PROFILE, ticker: 'IGLN.L', listingCurrency: 'USD' }),
+    });
+    const ticker = await resolveTickerWith('IE00B4ND3602', 'IGLN', deps, 'USD');
+    expect(ticker).toBe('IGLN.L');
+  });
+
   it('trusts a cached hit when its currency matches the expectation (no search)', async () => {
     const deps = makeDeps({
       byIsin: async () => ({ ticker: 'AAPL', listing_currency: 'USD' }),
