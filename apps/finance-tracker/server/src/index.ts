@@ -13,6 +13,7 @@ import { holdingRoutes } from './routes/holdings';
 import { transactionRoutes } from './routes/transactions';
 import { importRoutes } from './routes/import';
 import { searchRoutes } from './routes/search';
+import { marketDataRoutes } from './routes/marketData';
 import { errorHandler } from './middleware/errorHandler';
 
 // Reviewer fix N4: error tracking. No-op locally (init skipped without a DSN).
@@ -39,6 +40,10 @@ app.route('/api/holdings', holdingRoutes);
 app.route('/api/transactions', transactionRoutes);
 app.route('/api/import', importRoutes);
 app.route('/api/search', searchRoutes);
+// Shared market data (prices / profiles / fx). Routes declare their own
+// /prices, /profiles, /fx subpaths so they mount under the /api prefix. Authed
+// but NOT user-scoped (same model as /api/search).
+app.route('/api', marketDataRoutes);
 
 // --- Single-container static serving (finalized in M2) ---------------------
 // In production the built web SPA lives next to the compiled server. From
