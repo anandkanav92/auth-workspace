@@ -42,15 +42,6 @@ vi.mock('../src/db/holdings', () => ({
         (h) => h.user === user && (!opts.account || h.account === opts.account),
       ),
     ),
-    create: vi.fn(async (data: Omit<HoldingRow, 'id'>) => {
-      const row = { ...data, id: `h${++hid}` };
-      holdings.push(row);
-      return row;
-    }),
-    delete: vi.fn(async (id: string) => {
-      holdings = holdings.filter((h) => h.id !== id);
-      return true;
-    }),
   },
 }));
 
@@ -61,12 +52,60 @@ vi.mock('../src/db/imports', () => ({
         (i) => i.user === user && i.account === account && i.file_hash === hash,
       ) ?? null,
     ),
-    create: vi.fn(async (data: Record<string, unknown>) => {
-      const row = { ...data, id: `i${++iid}`, created: new Date().toISOString() };
-      imports.push(row);
-      return row;
-    }),
   },
+}));
+
+// The atomic commit (C1) goes through pbAdmin().createBatch() (see
+// src/db/importCommit.ts), so we mock the batch client here. The fake batch
+// queues collection ops and applies them to the in-memory arrays ONLY on
+// send() — mirroring PocketBase's all-or-nothing semantics. A queued op may set
+// `throwOnSend` to simulate a mid-batch failure, in which case send() rejects
+// WITHOUT mutating any array (the no-wipe guarantee).
+type BatchOp =
+  | { kind: 'delete'; collection: string; id: string }
+  | { kind: 'create'; collection: string; data: Record<string, unknown>; throwOnSend?: boolean };
+let batchOps: BatchOp[] = [];
+
+vi.mock('../src/lib/pb', () => ({
+  pbAdmin: vi.fn(async () => ({
+    createBatch: () => {
+      const ops: BatchOp[] = [];
+      const sub = (collection: string) => ({
+        delete: (id: string) => {
+          ops.push({ kind: 'delete', collection, id });
+        },
+        create: (data: Record<string, unknown>) => {
+          ops.push({ kind: 'create', collection, data, throwOnSend: data.__fail === true });
+        },
+      });
+      return {
+        collection: (name: string) => sub(name),
+        send: async () => {
+          batchOps = ops; // expose for assertions
+          // Validate the WHOLE batch first; mutate nothing if any op fails.
+          if (ops.some((o) => o.kind === 'create' && o.throwOnSend)) {
+            throw new Error('Batch request failed (simulated mid-batch failure).');
+          }
+          const results: Array<{ status: number; body: Record<string, unknown> }> = [];
+          for (const o of ops) {
+            if (o.kind === 'delete') {
+              holdings = holdings.filter((h) => h.id !== o.id);
+              results.push({ status: 200, body: {} });
+            } else if (o.collection === 'holdings') {
+              const row = { ...(o.data as Omit<HoldingRow, 'id'>), id: `h${++hid}` };
+              holdings.push(row as HoldingRow);
+              results.push({ status: 200, body: row as unknown as Record<string, unknown> });
+            } else {
+              const row = { ...o.data, id: `i${++iid}`, created: new Date().toISOString() };
+              imports.push(row as ImportRow);
+              results.push({ status: 200, body: row });
+            }
+          }
+          return results;
+        },
+      };
+    },
+  })),
 }));
 
 // symbol_profiles + price_cache: pretend nothing is known/cached, swallow writes.
@@ -132,6 +171,7 @@ beforeEach(() => {
   accounts = [{ id: 'accA', user: 'userA' }];
   holdings = [];
   imports = [];
+  batchOps = [];
   hid = 0;
   iid = 0;
   _clearPreviews();
@@ -201,6 +241,37 @@ describe('POST /api/import/upload + /commit', () => {
     });
     expect(holdings.find((h) => h.ticker === 'OLD')).toBeUndefined();
     expect(holdings).toHaveLength(4);
+  });
+
+  it('commits all deletes + creates + the imports row in ONE batch (C1 atomicity)', async () => {
+    const app = makeApp();
+    holdings.push({
+      id: 'old1',
+      user: 'userA',
+      account: 'accA',
+      ticker: 'OLD',
+      quantity: 99,
+      source: 'manual',
+    });
+    const p = await (await uploadT212(app, 'accA')).json();
+    await app.request('/api/import/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ previewId: p.previewId }),
+    });
+
+    // Everything went through a single batch.send(): 1 delete (OLD) + 4 holding
+    // creates + 1 imports-row create.
+    expect(batchOps.filter((o) => o.kind === 'delete')).toHaveLength(1);
+    expect(
+      batchOps.filter((o) => o.kind === 'create' && o.collection === 'holdings'),
+    ).toHaveLength(4);
+    expect(
+      batchOps.filter((o) => o.kind === 'create' && o.collection === 'imports'),
+    ).toHaveLength(1);
+    // The imports-row create is LAST so its (per-account) unique-index check
+    // rolls back the deletes too if it ever fires (I1).
+    expect(batchOps.at(-1)).toMatchObject({ kind: 'create', collection: 'imports' });
   });
 
   it('rejects an upload to an account the caller does not own → 404', async () => {

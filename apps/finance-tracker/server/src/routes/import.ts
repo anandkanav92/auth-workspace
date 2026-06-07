@@ -11,11 +11,14 @@
 //        names/prices
 //     7. cache the parsed result (10-min TTL) → return { previewId, diff, summary }
 //
-//   POST /api/import/commit  ({ previewId }) → snapshot-replace
+//   POST /api/import/commit  ({ previewId }) → snapshot-replace (ATOMIC)
 //     1. load preview (404 "preview expired or not found" if gone)
-//     2. delete ALL holdings for (user, account)
-//     3. insert the statement's holdings
-//     4. write an imports row (hash, filename, row_count, status)
+//     2. in ONE PocketBase batch transaction (all-or-nothing — C1 fix):
+//        - delete ALL holdings for (user, account)
+//        - insert the statement's holdings
+//        - write the imports row (hash, filename, row_count, status)
+//     If any step fails the whole batch rolls back, so a mid-insert failure can
+//     no longer leave the account wiped (see db/importCommit.ts).
 //
 // SECURITY: both routes are behind authMiddleware + rateLimit and assert the
 // target account belongs to c.var.pbUserId via requireOwned (the admin repos
@@ -28,6 +31,7 @@ import { HTTPException } from 'hono/http-exception';
 import { accountsRepo } from '../db/accounts';
 import { holdingsRepo } from '../db/holdings';
 import { importsRepo } from '../db/imports';
+import { commitSnapshotReplace } from '../db/importCommit';
 import { symbolProfilesRepo } from '../db/symbolProfiles';
 import { priceCacheRepo } from '../db/priceCache';
 import { extractPositionedText } from '../importers/safe-pdf';
@@ -41,9 +45,10 @@ import {
   getPreview,
   deletePreview,
   type PreviewRecord,
+  type DiffEntry,
 } from './importPreview';
 import { parseBody, readJson, requireOwned } from './_helpers';
-import type { SymbolProfileCreate } from '../db/schemas';
+import type { HoldingCreate, Import, SymbolProfileCreate } from '../db/schemas';
 
 type Vars = { Variables: { uid: string; email: string; pbUserId: string } };
 
@@ -163,18 +168,11 @@ export const importRoutes = new Hono<Vars>()
     // deleted/reassigned between upload and commit).
     await requireOwned(accountsRepo, preview.account, pbUserId);
 
-    await commitPreview(preview);
+    // Atomic snapshot-replace: delete prior holdings + insert the new positions
+    // + write the imports row, all in ONE batch transaction. On any failure the
+    // whole thing rolls back (no wipe). See db/importCommit.ts (C1 fix).
+    const importRow = await commitPreview(preview);
     deletePreview(previewId);
-
-    const importRow = await importsRepo.create({
-      user: pbUserId,
-      account: preview.account,
-      source: preview.source,
-      filename: preview.filename,
-      file_hash: preview.fileHash,
-      row_count: preview.positions.length,
-      status: 'success',
-    });
 
     return c.json({
       ok: true,
@@ -184,34 +182,49 @@ export const importRoutes = new Hono<Vars>()
   });
 
 /**
- * Snapshot-replace: delete every holding for (user, account) then insert the
- * statement's positions. Closed (qty 0) holdings are included in the delete so a
- * re-import starts from a clean slate.
+ * Atomic snapshot-replace: in a single PocketBase batch transaction, delete
+ * every holding for (user, account), insert the statement's positions, and
+ * write the imports row. Closed (qty 0) holdings are included in the delete so a
+ * re-import starts from a clean slate. Returns the created imports row.
+ *
+ * All-or-nothing (C1 fix): if any request in the batch fails, PocketBase rolls
+ * back the entire batch — the account's prior holdings are preserved and no
+ * imports row is written.
  */
-async function commitPreview(preview: PreviewRecord): Promise<void> {
+async function commitPreview(preview: PreviewRecord): Promise<Import> {
   const existing = await holdingsRepo.listForUser(preview.pbUserId, {
     account: preview.account,
   });
-  for (const h of existing) {
-    await holdingsRepo.delete(h.id);
-  }
-  for (const pos of preview.positions) {
-    // NOTE for the P&L tiles (M11): PocketBase's NumberField coerces a written
-    // null cost_basis to 0 on read, so 0 is NOT a reliable "no cost data" signal.
-    // The reliable marker is the (TextField) cost_currency staying EMPTY —
-    // Revolut positions have no cost_currency. Tiles must exclude positions with
-    // an empty cost_currency from return aggregation (spike 2).
-    await holdingsRepo.create({
+
+  // NOTE for the P&L tiles (M11): PocketBase's NumberField coerces a written
+  // null cost_basis to 0 on read, so 0 is NOT a reliable "no cost data" signal.
+  // The reliable marker is the (TextField) cost_currency staying EMPTY —
+  // Revolut positions have no cost_currency. Tiles must exclude positions with
+  // an empty cost_currency from return aggregation (spike 2).
+  const holdings: HoldingCreate[] = preview.positions.map((pos) => ({
+    user: preview.pbUserId,
+    account: preview.account,
+    ticker: pos.ticker,
+    isin: pos.isin,
+    quantity: pos.quantity,
+    cost_basis: pos.cost_basis ?? null,
+    cost_currency: pos.cost_currency ?? null,
+    source: preview.source,
+  }));
+
+  return commitSnapshotReplace({
+    existing,
+    holdings,
+    importRow: {
       user: preview.pbUserId,
       account: preview.account,
-      ticker: pos.ticker,
-      isin: pos.isin,
-      quantity: pos.quantity,
-      cost_basis: pos.cost_basis ?? null,
-      cost_currency: pos.cost_currency ?? null,
       source: preview.source,
-    });
-  }
+      filename: preview.filename,
+      file_hash: preview.fileHash,
+      row_count: preview.positions.length,
+      status: 'success',
+    },
+  });
 }
 
 /** Which of `tickers` already have a symbol_profiles row (so they're not "new"). */
@@ -231,10 +244,10 @@ async function knownTickerSet(tickers: string[]): Promise<Set<string>> {
  * cache them. Best-effort: a failed fetch leaves the ticker unenriched but does
  * not fail the upload (the preview just won't show a name/price for it).
  */
-async function enrichNewTickers(
-  diff: Array<{ ticker: string; isin: string; isNewTicker: boolean }>,
-): Promise<void> {
-  const todo = diff.filter((d) => d.isNewTicker);
+async function enrichNewTickers(diff: DiffEntry[]): Promise<void> {
+  // Skip 'removed' entries: a holding the statement dropped is not a ticker we
+  // need to enrich (it carries no new profile/price to fetch).
+  const todo = diff.filter((d) => d.isNewTicker && d.status !== 'removed');
   await Promise.all(
     todo.map(async (d) => {
       const [profile, quote] = await Promise.all([

@@ -37,6 +37,9 @@ import { accountRoutes } from '../../src/routes/accounts';
 import { holdingRoutes } from '../../src/routes/holdings';
 import { importRoutes } from '../../src/routes/import';
 import { errorHandler } from '../../src/middleware/errorHandler';
+import { holdingsRepo } from '../../src/db/holdings';
+import { importsRepo } from '../../src/db/imports';
+import { putPreview } from '../../src/routes/importPreview';
 
 const PB_URL = process.env.PB_URL!;
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -153,5 +156,108 @@ describe('M6 import roundtrip (E2E against real PocketBase)', () => {
     expect(second).toHaveLength(5);
     expect(second.find((h: { ticker: string }) => h.ticker === 'AAPL')).toBeUndefined();
     expect(second.find((h: { ticker: string }) => h.ticker === 'META')).toBeTruthy();
+  });
+
+  // C1: a mid-insert failure must NOT wipe the account. We craft a preview whose
+  // SECOND position has an over-long ticker (holdings.ticker max=32 → PocketBase
+  // validation error). The atomic batch (delete-all + inserts + imports-row)
+  // must roll back entirely: the account's PRIOR holdings survive and no success
+  // imports row is written.
+  it('mid-insert failure rolls back — prior holdings survive, no success import (C1)', async () => {
+    const acc = await (
+      await json('POST', '/api/accounts', { source: 'trading212', label: 'NoWipe' })
+    ).json();
+
+    // Seed two prior holdings the way a previous import would have.
+    await holdingsRepo.create({
+      user: userAId,
+      account: acc.id,
+      ticker: 'PRIOR1',
+      isin: 'US0000000001',
+      quantity: 10,
+      cost_basis: 1000,
+      cost_currency: 'USD',
+      source: 'trading212',
+    });
+    await holdingsRepo.create({
+      user: userAId,
+      account: acc.id,
+      ticker: 'PRIOR2',
+      isin: 'US0000000002',
+      quantity: 5,
+      cost_basis: 500,
+      cost_currency: 'USD',
+      source: 'trading212',
+    });
+
+    // Build a preview directly: one valid position + one with an invalid ticker
+    // (> 32 chars) that PocketBase will reject mid-batch.
+    const badTicker = 'X'.repeat(40); // exceeds holdings.ticker max=32
+    const previewId = putPreview({
+      pbUserId: userAId,
+      account: acc.id,
+      source: 'trading212',
+      filename: 'midfail.pdf',
+      fileHash: 'deadbeef-midfail-' + Date.now(),
+      positions: [
+        { ticker: 'GOOD', isin: 'US0000000003', quantity: 1, cost_basis: 100, cost_currency: 'USD' },
+        { ticker: badTicker, isin: 'US0000000004', quantity: 2, cost_basis: 200, cost_currency: 'USD' },
+      ],
+      diff: [],
+    });
+
+    const commit = await json('POST', '/api/import/commit', { previewId });
+    expect(commit.status).toBeGreaterThanOrEqual(500); // surfaced as a 5xx
+
+    // No wipe: the two PRIOR holdings still exist, and neither new position was
+    // inserted (full rollback).
+    const after = await holdingsRepo.listForUser(userAId, { account: acc.id });
+    const tickers = after.map((h) => h.ticker).sort();
+    expect(tickers).toEqual(['PRIOR1', 'PRIOR2']);
+    expect(after.find((h) => h.ticker === 'GOOD')).toBeUndefined();
+
+    // No success imports row was written for this account.
+    const imports = await importsRepo.list(userAId);
+    expect(
+      imports.find((i) => i.account === acc.id && i.status === 'success'),
+    ).toBeUndefined();
+  });
+
+  // I1: the same file is allowed into a SECOND account (runtime dedup is keyed
+  // by (user, account, file_hash)). Before the index fix this 500'd AFTER wiping
+  // account B; now the (user, account, file_hash) unique index matches the
+  // runtime scope, so B succeeds and re-importing to A is what 409s.
+  it('same file → account A (ok), account B (ok now, was 500), account A again (409) (I1)', async () => {
+    const accA = await (
+      await json('POST', '/api/accounts', { source: 'trading212', label: 'DedupA' })
+    ).json();
+    const accB = await (
+      await json('POST', '/api/accounts', { source: 'trading212', label: 'DedupB' })
+    ).json();
+
+    // 1. Same file into account A → succeeds.
+    const pA = await (await uploadFixture('t212-synthetic.pdf', accA.id)).json();
+    const commitA = await json('POST', '/api/import/commit', { previewId: pA.previewId });
+    expect(commitA.status).toBe(200);
+    const holdingsA = await (await app.request(`/api/holdings?accountId=${accA.id}`)).json();
+    expect(holdingsA).toHaveLength(4);
+
+    // 2. SAME file into account B → must SUCCEED now (was a 500-after-wipe).
+    const uploadB = await uploadFixture('t212-synthetic.pdf', accB.id);
+    expect(uploadB.status).toBe(200);
+    const pB = await uploadB.json();
+    const commitB = await json('POST', '/api/import/commit', { previewId: pB.previewId });
+    expect(commitB.status).toBe(200);
+    const holdingsB = await (await app.request(`/api/holdings?accountId=${accB.id}`)).json();
+    expect(holdingsB).toHaveLength(4);
+
+    // Account A is untouched by the B import.
+    const holdingsAAfter = await (await app.request(`/api/holdings?accountId=${accA.id}`)).json();
+    expect(holdingsAAfter).toHaveLength(4);
+
+    // 3. SAME file into account A AGAIN → 409 (per-account dedup still blocks).
+    const dupA = await uploadFixture('t212-synthetic.pdf', accA.id);
+    expect(dupA.status).toBe(409);
+    expect((await dupA.json()).error).toBe('already_imported');
   });
 });

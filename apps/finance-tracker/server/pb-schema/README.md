@@ -15,7 +15,7 @@ roll a schema change to every environment.
 | `accounts`          | per-user | list/view/create/update/delete = `@request.auth.id != "" && user = @request.auth.id` |
 | `holdings`          | per-user | same (cost_basis / cost_currency are nullable — Revolut PDF has none) |
 | `transactions`      | per-user | same |
-| `imports`           | per-user | same (unique `(user, file_hash)` for idempotency) |
+| `imports`           | per-user | same (unique `(user, account, file_hash)` — per-account dedup, migration 1717000005) |
 | `holdings_snapshot` | per-user | same |
 | `symbol_profiles`   | shared   | list/view = `@request.auth.id != ""`; create/update/delete = locked (superuser only) |
 | `price_cache`       | shared   | same as symbol_profiles |
