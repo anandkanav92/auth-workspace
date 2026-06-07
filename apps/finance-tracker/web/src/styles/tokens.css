@@ -1,0 +1,68 @@
+/*
+ * Semantic design tokens for the investment dashboard.
+ *
+ * Tokens are SEMANTIC by name (--success, not --green-500) so components never
+ * reference raw colours. Both themes are designed intentionally — dark is not a
+ * mechanical inversion of light; it uses a cooler near-black base with slightly
+ * desaturated accents that stay legible against dark surfaces.
+ *
+ * Light theme  -> :root
+ * Dark theme   -> [data-theme="dark"]   (applied to <html> by the ThemeProvider)
+ *
+ * The @theme inline block maps each token to a Tailwind colour utility so we can
+ * write `bg-bg`, `text-fg`, `text-muted`, `bg-accent`, etc. and have them resolve
+ * to the live CSS variable (so they react to the data-theme switch at runtime).
+ */
+
+:root {
+  /* Surfaces & text */
+  --bg: #f6f7f9; /* app background — warm off-white, easier on the eyes than pure white */
+  --surface: #ffffff; /* cards / tiles raised above the background */
+  --fg: #0c1118; /* primary text — near-black with a hint of navy */
+  --muted: #5b6573; /* secondary text, labels, captions */
+
+  /* Brand / interaction */
+  --accent: #2563eb; /* primary action, links, active tab (blue-600) */
+
+  /* Financial semantics */
+  --success: #15803d; /* gains / positive deltas (green-700, AA on white) */
+  --danger: #dc2626; /* losses / destructive actions (red-600) */
+  --warning: #b45309; /* stale data, caution (amber-700) */
+
+  /* Supporting tokens derived from the semantic set */
+  --border: #e3e6ea; /* hairlines, tile borders, dividers */
+  --accent-fg: #ffffff; /* text/icon colour on top of --accent */
+}
+
+[data-theme="dark"] {
+  /* Surfaces & text — cool near-black, surfaces lifted with a subtle lighten */
+  --bg: #0b0f14; /* deep, slightly blue-black canvas */
+  --surface: #151b23; /* tiles sit visibly above the canvas */
+  --fg: #e7ecf2; /* off-white text, never pure #fff (reduces glare) */
+  --muted: #8b97a6; /* secondary text — lighter than light-mode muted for contrast */
+
+  /* Brand / interaction — brighter so it pops on dark surfaces */
+  --accent: #4f8bff; /* lifted blue, AA on --surface */
+
+  /* Financial semantics — desaturated/brightened for dark backgrounds */
+  --success: #3ecf8e; /* gains — mint-green, vivid but not neon */
+  --danger: #f87171; /* losses — soft red, avoids harsh pure red on black */
+  --warning: #f0b429; /* stale data — warm amber */
+
+  /* Supporting tokens */
+  --border: #2a323d; /* subtle dividers on dark surfaces */
+  --accent-fg: #0b0f14; /* dark text on the lifted accent for max contrast */
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+}

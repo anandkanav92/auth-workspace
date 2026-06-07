@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@import "./styles/tokens.css";
+
+/*
+ * shadcn/ui primitives reference Tailwind's `border-border`, `bg-background`,
+ * `ring-ring` etc. We bridge those names to our semantic tokens here so the
+ * generated component code stays vanilla shadcn while resolving to our palette.
+ */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--fg);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-fg);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--fg);
+  --color-muted-foreground: var(--muted);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--accent-fg);
+  --color-ring: var(--accent);
+  --color-input: var(--border);
+  --radius: 0.75rem;
+}
+
+html {
+  color-scheme: light;
+  /* Avoid a flash of the wrong theme: the ThemeProvider sets data-theme as
+     early as possible, but this keeps native form controls in step. */
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Safe-area padding helper for the bottom tab bar (iOS notch / home indicator). */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
