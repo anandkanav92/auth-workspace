@@ -8,6 +8,7 @@ import {
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LayoutPreview } from "@/dev/LayoutPreview";
+import { TilesPreview } from "@/dev/TilesPreview";
 import { AccountHoldingsPage } from "@/routes/AccountHoldingsPage";
 import { AccountPage } from "@/routes/AccountPage";
 import { ImportPage } from "@/routes/ImportPage";
@@ -26,7 +27,8 @@ import { SettingsPage } from "@/routes/SettingsPage";
  *   │   ├─ /account/$id/holdings
  *   │   ├─ /settings
  *   │   └─ /import
- *   └─ /dev/layout  (standalone visual-QA surface; NOT inside the shell)
+ *   ├─ /dev/layout  (standalone visual-QA surface; NOT inside the shell)
+ *   └─ /dev/tiles   (standalone analytics-tile gallery; fixture data, no BFF)
  */
 
 const rootRoute = createRootRoute({
@@ -94,6 +96,14 @@ const devLayoutRoute = createRoute({
   component: LayoutPreview,
 });
 
+// Dev-only analytics-tile gallery. Renders the six REAL tiles populated from a
+// seeded fixture cache (no BFF, no auth) so charts can be screenshot-verified.
+const devTilesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dev/tiles",
+  component: TilesPreview,
+});
+
 const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     indexRoute,
@@ -104,6 +114,7 @@ const routeTree = rootRoute.addChildren([
     importRoute,
   ]),
   devLayoutRoute,
+  devTilesRoute,
 ]);
 
 export const router = createRouter({ routeTree });

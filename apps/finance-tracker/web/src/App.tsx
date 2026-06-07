@@ -14,19 +14,21 @@ import { router } from "@/router";
  *      └─ AuthGate          Firebase auth boundary (LoginPage when signed out)
  *         └─ RouterProvider TanStack Router (the routed app shell)
  *
- * `/dev/layout` is a dev-only visual-QA surface with no auth or BFF dependency,
- * so it renders the router directly, bypassing the AuthGate (matches the M9
- * behaviour where the preview was reachable without signing in).
+ * Any `/dev/*` route is a dev-only visual-QA surface with no auth or BFF
+ * dependency (the layout preview, and the analytics-tile gallery at
+ * `/dev/tiles` which seeds its own fixture cache), so it renders the router
+ * directly, bypassing the AuthGate — matches the M9 behaviour where the preview
+ * was reachable without signing in.
  */
 function App() {
-  const isDevLayout =
+  const isDevSurface =
     typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/dev/layout");
+    window.location.pathname.startsWith("/dev/");
 
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        {isDevLayout ? (
+        {isDevSurface ? (
           <RouterProvider router={router} />
         ) : (
           <AuthGate>
