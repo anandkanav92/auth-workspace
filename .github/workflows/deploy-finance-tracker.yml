@@ -1,0 +1,18 @@
+name: Deploy finance-tracker
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/finance-tracker/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-finance-tracker.yml'
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Pull latest
+        run: git -C /Users/kanav_personal/projects/auth-workspace pull origin main
+      - name: Deploy (BFF + own PocketBase)
+        working-directory: /Users/kanav_personal/projects/auth-workspace/apps/finance-tracker
+        run: PATH="$HOME/bin:$PATH" docker compose up -d --build
