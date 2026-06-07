@@ -1,12 +1,15 @@
 import React from 'react';
+import { THEME } from '../../data/constants';
 
+// Coral intensity ramp — light → deep coral as completion rises, matching the
+// app-wide "completion = coral" language.
 function getCellColor(pct) {
-  if (pct < 0) return '#f5f5fa';
-  if (pct === 0) return '#fde8e8';
-  if (pct <= 32) return '#d1fae5';
-  if (pct <= 65) return '#6ee7b7';
-  if (pct <= 99) return '#34d399';
-  return '#10B981';
+  if (pct < 0) return THEME.surfaceAlt; // no habits scheduled that day
+  if (pct === 0) return '#FBE4DE';      // had habits, none done (faint warm)
+  if (pct <= 32) return '#FECDD3';      // coral-200
+  if (pct <= 65) return '#FDA4AF';      // coral-300
+  if (pct <= 99) return '#FB7185';      // coral-400 (accent)
+  return '#F43F5E';                     // coral-500 (deep)
 }
 
 function getTooltipText(entry) {
@@ -66,10 +69,10 @@ export default function Heatmap({ heatmapData }) {
     <div style={{ marginBottom: 24 }}>
       <div
         style={{
-          fontFamily: "'Space Mono', monospace",
+          fontFamily: THEME.mono,
           fontSize: 11,
           fontWeight: 700,
-          color: '#888',
+          color: THEME.textMuted,
           letterSpacing: 1,
           textTransform: 'uppercase',
           marginBottom: 8,
@@ -80,9 +83,9 @@ export default function Heatmap({ heatmapData }) {
 
       <div
         style={{
-          background: '#fff',
+          background: THEME.surface,
           borderRadius: 14,
-          border: '1px solid #e8e8f0',
+          border: `1px solid ${THEME.border}`,
           padding: 16,
           overflowX: 'auto',
         }}
@@ -97,8 +100,8 @@ export default function Heatmap({ heatmapData }) {
               textAnchor="middle"
               style={{
                 fontSize: 9,
-                fill: '#aaa',
-                fontFamily: "'Space Mono', monospace",
+                fill: THEME.textFaint,
+                fontFamily: THEME.mono,
               }}
             >
               {month}
@@ -114,8 +117,8 @@ export default function Heatmap({ heatmapData }) {
               textAnchor="end"
               style={{
                 fontSize: 8,
-                fill: '#bbb',
-                fontFamily: "'Space Mono', monospace",
+                fill: THEME.textFaint,
+                fontFamily: THEME.mono,
               }}
             >
               {label}

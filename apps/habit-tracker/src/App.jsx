@@ -6,16 +6,19 @@ import { unlockAudio, playAlarm } from "./components/Timer";
 import FloatingTimerPill from "./components/FloatingTimerPill";
 import HabitForm from "./components/HabitForm";
 import HabitDetail from "./components/HabitDetail";
-import StreakDots from "./components/StreakDots";
 import LoginPage from "./components/LoginPage";
 import CompletionNotes from "./components/CompletionNotes";
 import ProgressPage from "./components/ProgressPage";
+import WeeklyView from "./components/WeeklyView";
+import DailyAgenda from "./components/DailyAgenda";
+import StreaksGuide from "./components/StreaksGuide";
 import {
   getDateForOffset,
   getJsDayToOurDay,
   toDateStr,
   formatDateHeader,
   getLast5Occurrences,
+  THEME,
 } from "./data/constants";
 
 export default function HabitTracker() {
@@ -28,8 +31,9 @@ export default function HabitTracker() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontFamily: "'DM Sans', sans-serif",
-        color: "#888",
+        fontFamily: THEME.sans,
+        color: THEME.textMuted,
+        background: THEME.bg,
       }}>
         Loading...
       </div>
@@ -64,6 +68,7 @@ function AuthenticatedApp({ user }) {
   const analytics = useAnalytics(habits, completions, categories, vacationMode, vacationStart);
 
   const [dayOffset, setDayOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [selectedHabit, setSelectedHabit] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
@@ -71,8 +76,10 @@ function AuthenticatedApp({ user }) {
   const [completionNotesDateStr, setCompletionNotesDateStr] = useState(null);
   const [showVacationConfirm, setShowVacationConfirm] = useState(false);
 
-  // Swipe navigation: 0 = daily view, 1 = progress page
+  // Bottom-nav pages: 0 = Activities, 1 = Progress
   const [pageIndex, setPageIndex] = useState(0);
+  // Sub-view inside Activities, toggled by the top segmented control
+  const [activityView, setActivityView] = useState("week"); // "week" | "today"
   const touchRef = useRef({ startX: 0, startY: 0, swiping: false });
 
   // Timer state — lifted here so both HabitDetail and FloatingTimerPill can access it
@@ -125,8 +132,8 @@ function AuthenticatedApp({ user }) {
   function handleTouchEnd(e) {
     if (!touchRef.current.swiping) return;
     const dx = e.changedTouches[0].clientX - touchRef.current.startX;
-    if (dx < -60 && pageIndex === 0) setPageIndex(1);
-    if (dx > 60 && pageIndex === 1) setPageIndex(0);
+    if (dx < -60 && pageIndex < 2) setPageIndex(p => p + 1);
+    if (dx > 60 && pageIndex > 0) setPageIndex(p => p - 1);
     touchRef.current.swiping = false;
   }
 
@@ -134,7 +141,8 @@ function AuthenticatedApp({ user }) {
     const habit = habits.find(h => h.id === habitId);
     if (habit) {
       setSelectedHabit(habit);
-      setPageIndex(0);
+      setActivityView("today"); // Habit detail is most contextual in the daily list
+      setPageIndex(0); // Activities page
     }
   }
 
@@ -171,7 +179,8 @@ function AuthenticatedApp({ user }) {
     return (
       <div style={{
         minHeight: "100vh", display: "flex", alignItems: "center",
-        justifyContent: "center", fontFamily: "'DM Sans', sans-serif", color: "#888",
+        justifyContent: "center", fontFamily: THEME.sans, color: THEME.textMuted,
+        background: THEME.bg,
       }}>
         Loading...
       </div>
@@ -182,16 +191,14 @@ function AuthenticatedApp({ user }) {
   const viewDate = getDateForOffset(dayOffset);
   const dateStr = toDateStr(viewDate);
   const ourDay = getJsDayToOurDay(viewDate.getDay());
-  const todaysHabits = habits.filter((h) => h.days.includes(ourDay));
-
-  // Group habits by categoryId
-  const groupedByCategory = {};
-  todaysHabits.forEach((habit) => {
-    if (!groupedByCategory[habit.categoryId]) {
-      groupedByCategory[habit.categoryId] = [];
-    }
-    groupedByCategory[habit.categoryId].push(habit);
-  });
+  const todaysHabits = habits
+    .filter((h) => h.days.includes(ourDay))
+    .sort((a, b) => {
+      if (!a.time && !b.time) return 0;
+      if (!a.time) return -1;
+      if (!b.time) return 1;
+      return a.time.localeCompare(b.time);
+    });
 
   const totalHabits = todaysHabits.length;
   const doneCount = todaysHabits.filter(
@@ -205,10 +212,9 @@ function AuthenticatedApp({ user }) {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       style={{
-        fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
-        background:
-          "linear-gradient(145deg, #f5f5fa 0%, #ffffff 50%, #f0f0f8 100%)",
-        color: "#1a1a2e",
+        fontFamily: THEME.sans,
+        background: THEME.bgGradient,
+        color: THEME.text,
         minHeight: "100vh",
         overflow: "hidden",
       }}
@@ -235,15 +241,15 @@ function AuthenticatedApp({ user }) {
       {/* Horizontal swipe container */}
       <div style={{
         display: "flex",
-        width: "200%",
-        transform: `translateX(-${pageIndex * 50}%)`,
+        width: "300%",
+        transform: `translateX(-${pageIndex * (100 / 3)}%)`,
         transition: "transform 0.3s ease",
         minHeight: "100vh",
       }}>
-        {/* Page 0: Daily View */}
-        <div style={{ width: "50%", minHeight: "100vh", padding: "20px 16px 90px", overflowY: "auto" }}>
-          <div style={{ maxWidth: 900, margin: "0 auto" }}>
-            {/* User bar */}
+        {/* Page 0: Activities (Week / Today toggle) */}
+        <div style={{ width: `${100 / 3}%`, minHeight: "100vh", padding: "20px 16px 90px", overflowY: "auto" }}>
+          <div style={{ maxWidth: 1040, margin: "0 auto" }}>
+            {/* User bar (shared) */}
             <div style={{
               display: "flex",
               alignItems: "center",
@@ -261,8 +267,8 @@ function AuthenticatedApp({ user }) {
                   />
                 )}
                 <span style={{
-                  fontSize: 13, fontWeight: 500, color: "#666",
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: 13, fontWeight: 500, color: THEME.textMuted,
+                  fontFamily: THEME.sans,
                 }}>
                   {user.displayName || user.email}
                 </span>
@@ -278,10 +284,10 @@ function AuthenticatedApp({ user }) {
                   }}
                   style={{
                     background: vacationMode ? "#fef3c7" : "none",
-                    border: `1px solid ${vacationMode ? "#f59e0b" : "#e0e0eb"}`,
+                    border: `1px solid ${vacationMode ? "#f59e0b" : THEME.border}`,
                     borderRadius: 8, padding: "4px 10px",
-                    fontSize: 12, color: vacationMode ? "#d97706" : "#999",
-                    cursor: "pointer", fontFamily: "'Space Mono', monospace",
+                    fontSize: 12, color: vacationMode ? "#d97706" : THEME.textMuted,
+                    cursor: "pointer", fontFamily: THEME.mono,
                   }}
                 >
                   {vacationMode ? "🏖️ On" : "🏖️"}
@@ -289,10 +295,10 @@ function AuthenticatedApp({ user }) {
                 <button
                   onClick={() => signOut()}
                   style={{
-                    background: "none", border: "1px solid #e0e0eb",
+                    background: "none", border: `1px solid ${THEME.border}`,
                     borderRadius: 8, padding: "4px 12px",
-                    fontSize: 12, color: "#999", cursor: "pointer",
-                    fontFamily: "'Space Mono', monospace",
+                    fontSize: 12, color: THEME.textMuted, cursor: "pointer",
+                    fontFamily: THEME.mono,
                   }}
                 >
                   Sign out
@@ -334,13 +340,70 @@ function AuthenticatedApp({ user }) {
               </div>
             )}
 
+            {/* Week / Today segmented toggle */}
+            <div style={{
+              display: "flex",
+              gap: 4,
+              padding: 4,
+              background: THEME.surfaceAlt,
+              border: `1px solid ${THEME.border}`,
+              borderRadius: 12,
+              marginBottom: 14,
+            }}>
+              {[
+                { id: "week", label: "Week" },
+                { id: "today", label: "Today" },
+              ].map((v) => {
+                const active = activityView === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => setActivityView(v.id)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 0",
+                      borderRadius: 9,
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      fontFamily: THEME.sans,
+                      color: active ? "#fff" : THEME.textMuted,
+                      background: active ? THEME.accent : "transparent",
+                      boxShadow: active ? "0 1px 4px rgba(251,113,133,0.35)" : "none",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    {v.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Weekly calendar */}
+            {activityView === "week" && (
+              <WeeklyView
+                weekOffset={weekOffset}
+                setWeekOffset={setWeekOffset}
+                habits={habits}
+                completions={completions}
+                toggleCompletion={toggleCompletion}
+                getCategory={getCategory}
+                onHabitClick={(habit) => setSelectedHabit(habit)}
+                vacationMode={vacationMode}
+              />
+            )}
+
+            {/* Daily view */}
+            {activityView === "today" && (
+            <>
             {/* Date Header */}
             <div
               style={{
-                background: "#ffffff",
+                background: THEME.surface,
                 borderRadius: 12,
                 padding: "10px 16px",
-                border: "1px solid #e0e0eb",
+                border: `1px solid ${THEME.border}`,
                 boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
                 marginBottom: 16,
               }}
@@ -357,7 +420,7 @@ function AuthenticatedApp({ user }) {
                   style={{
                     background: "none",
                     border: "none",
-                    color: "#999",
+                    color: THEME.textMuted,
                     fontSize: 18,
                     cursor: "pointer",
                     padding: "4px 8px",
@@ -367,15 +430,15 @@ function AuthenticatedApp({ user }) {
                 </button>
                 <div style={{ textAlign: "center" }}>
                   <div
-                    style={{ fontSize: 14, fontWeight: 600, color: "#1a1a2e" }}
+                    style={{ fontSize: 14, fontWeight: 600, color: THEME.text }}
                   >
                     {formatDateHeader(viewDate)}
                   </div>
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#888",
-                      fontFamily: "'Space Mono', monospace",
+                      color: THEME.textMuted,
+                      fontFamily: THEME.mono,
                       marginTop: 2,
                     }}
                   >
@@ -387,7 +450,7 @@ function AuthenticatedApp({ user }) {
                   style={{
                     background: "none",
                     border: "none",
-                    color: "#999",
+                    color: THEME.textMuted,
                     fontSize: 18,
                     cursor: "pointer",
                     padding: "4px 8px",
@@ -402,15 +465,15 @@ function AuthenticatedApp({ user }) {
                   <button
                     onClick={() => setDayOffset(0)}
                     style={{
-                      background: "#3B82F610",
-                      border: "1px solid #3B82F640",
+                      background: THEME.accentSoft,
+                      border: `1px solid ${THEME.accent}`,
                       borderRadius: 20,
                       padding: "3px 14px",
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "#3B82F6",
+                      color: THEME.accentText,
                       cursor: "pointer",
-                      fontFamily: "'Space Mono', monospace",
+                      fontFamily: THEME.mono,
                     }}
                   >
                     Today
@@ -421,8 +484,8 @@ function AuthenticatedApp({ user }) {
               {/* Progress bar */}
               <div
                 style={{
-                  height: 3,
-                  background: "#e5e5f0",
+                  height: 4,
+                  background: THEME.surfaceAlt,
                   borderRadius: 2,
                   marginTop: 8,
                   overflow: "hidden",
@@ -432,8 +495,7 @@ function AuthenticatedApp({ user }) {
                   style={{
                     height: "100%",
                     width: `${pct}%`,
-                    background:
-                      "linear-gradient(90deg, #E8453C, #3B82F6, #10B981)",
+                    background: `linear-gradient(90deg, ${THEME.accent}, ${THEME.accentHover})`,
                     borderRadius: 2,
                     transition: "width 0.3s ease",
                   }}
@@ -443,174 +505,31 @@ function AuthenticatedApp({ user }) {
 
             {/* Habit List */}
             {totalHabits > 0 ? (
-              Object.entries(groupedByCategory).map(
-                ([categoryId, habitsInCategory]) => {
-                  const category = getCategory(categoryId);
-                  return (
-                    <div key={categoryId} style={{ marginBottom: 16 }}>
-                      {/* Category header */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          marginBottom: 8,
-                          paddingLeft: 4,
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            background: category.color,
-                          }}
-                        />
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 700,
-                            color: category.color,
-                            fontFamily: "'Space Mono', monospace",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                          }}
-                        >
-                          {category.name}
-                        </span>
-                      </div>
-
-                      {/* Habits in this category */}
-                      {habitsInCategory.map((habit) => {
-                        const isChecked =
-                          !!completions[`${habit.id}-${dateStr}`];
-                        const occurrences = getLast5Occurrences(
-                          habit,
-                          completions,
-                          viewDate
-                        );
-
-                        return (
-                          <div
-                            key={habit.id}
-                            onClick={() => setSelectedHabit(habit)}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 10,
-                              padding: "10px 12px",
-                              borderRadius: 10,
-                              background: isChecked ? "#f0fdf8" : "#ffffff",
-                              border: `1px solid ${isChecked ? "#a7f3d0" : "#e8e8f0"}`,
-                              marginBottom: 6,
-                              cursor: "pointer",
-                              opacity: vacationMode ? 0.4 : 1,
-                              pointerEvents: vacationMode ? "none" : "auto",
-                            }}
-                          >
-                            {/* Checkbox */}
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const key = `${habit.id}-${dateStr}`;
-                                const isDone = !!completions[key];
-                                toggleCompletion(habit.id, dateStr);
-                                // Show notes sheet only when completing (not uncompleting)
-                                if (!isDone) {
-                                  setCompletionNotesHabit(habit);
-                                  setCompletionNotesDateStr(dateStr);
-                                }
-                              }}
-                              style={{
-                                width: 24,
-                                height: 24,
-                                borderRadius: 7,
-                                flexShrink: 0,
-                                border: isChecked
-                                  ? "2px solid #10B981"
-                                  : "2px solid #d0d0e0",
-                                background: isChecked
-                                  ? "#10B981"
-                                  : "transparent",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                transition: "all 0.2s ease",
-                                cursor: "pointer",
-                              }}
-                            >
-                              {isChecked && (
-                                <span
-                                  style={{
-                                    color: "#fff",
-                                    fontSize: 13,
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  ✓
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Category color bar */}
-                            <div
-                              style={{
-                                width: 4,
-                                height: 28,
-                                borderRadius: 2,
-                                background: category.color,
-                                flexShrink: 0,
-                                opacity: 0.7,
-                              }}
-                            />
-
-                            {/* Habit info */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div
-                                style={{
-                                  fontSize: 13,
-                                  fontWeight: 500,
-                                  color: isChecked ? "#10B981" : "#333",
-                                  textDecoration: isChecked
-                                    ? "line-through"
-                                    : "none",
-                                  opacity: isChecked ? 0.7 : 1,
-                                }}
-                              >
-                                {habit.icon} {habit.name}
-                              </div>
-                            </div>
-
-                            {/* Streak dots */}
-                            <StreakDots
-                              occurrences={occurrences}
-                              size="small"
-                            />
-
-                            {/* Chevron */}
-                            <span
-                              style={{
-                                color: "#ccc",
-                                fontSize: 14,
-                                flexShrink: 0,
-                              }}
-                            >
-                              ›
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                }
-              )
+              <DailyAgenda
+                habits={todaysHabits}
+                dateStr={dateStr}
+                viewDate={viewDate}
+                completions={completions}
+                getCategory={getCategory}
+                vacationMode={vacationMode}
+                onToggle={(habit) => {
+                  const isDone = !!completions[`${habit.id}-${dateStr}`];
+                  toggleCompletion(habit.id, dateStr);
+                  // Show notes sheet only when completing (not uncompleting)
+                  if (!isDone) {
+                    setCompletionNotesHabit(habit);
+                    setCompletionNotesDateStr(dateStr);
+                  }
+                }}
+                onOpenHabit={(habit) => setSelectedHabit(habit)}
+              />
             ) : (
               /* Empty state */
               <div
                 style={{
                   textAlign: "center",
                   padding: "60px 20px",
-                  color: "#aaa",
+                  color: THEME.textFaint,
                 }}
               >
                 <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
@@ -618,7 +537,7 @@ function AuthenticatedApp({ user }) {
                   style={{
                     fontSize: 16,
                     fontWeight: 600,
-                    color: "#888",
+                    color: THEME.textMuted,
                     marginBottom: 4,
                   }}
                 >
@@ -627,23 +546,30 @@ function AuthenticatedApp({ user }) {
                 <div
                   style={{
                     fontSize: 13,
-                    color: "#bbb",
+                    color: THEME.textFaint,
                   }}
                 >
                   Tap + to create one
                 </div>
               </div>
             )}
+            </>
+            )}
           </div>
         </div>
 
         {/* Page 1: Progress */}
-        <div style={{ width: "50%", minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
+        <div style={{ width: `${100 / 3}%`, minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
           <ProgressPage analytics={analytics} onHabitTap={handleLeaderboardTap} onBack={() => setPageIndex(0)} />
+        </div>
+
+        {/* Page 2: Streaks guide */}
+        <div style={{ width: `${100 / 3}%`, minHeight: "100vh", padding: "20px 0 90px", overflowY: "auto" }}>
+          <StreaksGuide />
         </div>
       </div>
 
-      {/* FAB — only on daily view */}
+      {/* FAB — visible on the Activities page only */}
       {pageIndex === 0 && (
         <button
           onClick={() => setShowCreateForm(true)}
@@ -655,12 +581,12 @@ function AuthenticatedApp({ user }) {
             height: 56,
             borderRadius: "50%",
             border: "none",
-            background: "linear-gradient(135deg, #3B82F6, #2563EB)",
+            background: THEME.accentGradient,
             color: "#fff",
             fontSize: 28,
             fontWeight: 300,
             cursor: "pointer",
-            boxShadow: "0 4px 16px rgba(59,130,246,0.35)",
+            boxShadow: "0 4px 16px rgba(251,113,133,0.4)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -675,14 +601,15 @@ function AuthenticatedApp({ user }) {
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0,
         display: "flex", justifyContent: "center",
-        background: "#ffffffee", backdropFilter: "blur(8px)",
-        borderTop: "1px solid #e8e8f0",
+        background: "#fffbf6ee", backdropFilter: "blur(8px)",
+        borderTop: `1px solid ${THEME.border}`,
         zIndex: 800,
         padding: "8px 0 env(safe-area-inset-bottom, 8px)",
       }}>
         {[
-          { idx: 0, label: "Today", icon: "📋" },
+          { idx: 0, label: "Activities", icon: "🗓️" },
           { idx: 1, label: "Progress", icon: "📊" },
+          { idx: 2, label: "Streaks", icon: "ℹ️" },
         ].map(tab => (
           <button
             key={tab.idx}
@@ -698,8 +625,8 @@ function AuthenticatedApp({ user }) {
             <span style={{ fontSize: 18 }}>{tab.icon}</span>
             <span style={{
               fontSize: 10, fontWeight: 600,
-              color: pageIndex === tab.idx ? "#3B82F6" : "#999",
-              fontFamily: "'Space Mono', monospace",
+              color: pageIndex === tab.idx ? THEME.accentText : THEME.textMuted,
+              fontFamily: THEME.mono,
               letterSpacing: "0.3px",
             }}>
               {tab.label}
@@ -707,7 +634,7 @@ function AuthenticatedApp({ user }) {
             {pageIndex === tab.idx && (
               <div style={{
                 width: 4, height: 4, borderRadius: "50%",
-                background: "#3B82F6", marginTop: 1,
+                background: THEME.accent, marginTop: 1,
               }} />
             )}
           </button>
@@ -797,16 +724,16 @@ function AuthenticatedApp({ user }) {
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "#fff", borderRadius: 16, padding: "24px 20px",
+              background: THEME.surface, borderRadius: 16, padding: "24px 20px",
               maxWidth: 320, width: "90%", textAlign: "center",
               boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
             }}
           >
             <div style={{ fontSize: 32, marginBottom: 8 }}>🏖️</div>
-            <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: "#1a1a2e" }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: THEME.text }}>
               Enable vacation mode?
             </h3>
-            <p style={{ margin: "0 0 16px", fontSize: 13, color: "#888", lineHeight: 1.5 }}>
+            <p style={{ margin: "0 0 16px", fontSize: 13, color: THEME.textMuted, lineHeight: 1.5 }}>
               All habits will be paused. Your streaks will be preserved until you resume.
             </p>
             <div style={{ display: "flex", gap: 10 }}>
@@ -814,8 +741,8 @@ function AuthenticatedApp({ user }) {
                 onClick={() => setShowVacationConfirm(false)}
                 style={{
                   flex: 1, padding: "10px 0", borderRadius: 8,
-                  border: "1px solid #e0e0eb", background: "#f9f9fc",
-                  fontSize: 13, fontWeight: 600, color: "#999", cursor: "pointer",
+                  border: `1px solid ${THEME.border}`, background: THEME.surfaceAlt,
+                  fontSize: 13, fontWeight: 600, color: THEME.textMuted, cursor: "pointer",
                 }}
               >
                 Cancel

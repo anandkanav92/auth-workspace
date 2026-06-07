@@ -1,4 +1,5 @@
 import React from 'react';
+import { THEME } from '../../data/constants';
 
 function CircularProgressRing({ percentage }) {
   const radius = 18;
@@ -14,7 +15,7 @@ function CircularProgressRing({ percentage }) {
         cy={size / 2}
         r={radius}
         fill="none"
-        stroke="#f0f0f8"
+        stroke={THEME.border}
         strokeWidth={strokeWidth}
       />
       <circle
@@ -22,7 +23,7 @@ function CircularProgressRing({ percentage }) {
         cy={size / 2}
         r={radius}
         fill="none"
-        stroke="#10B981"
+        stroke={THEME.accent}
         strokeWidth={strokeWidth}
         strokeDasharray={circumference}
         strokeDashoffset={offset}
@@ -36,9 +37,9 @@ function CircularProgressRing({ percentage }) {
         textAnchor="middle"
         style={{
           fontSize: 11,
-          fontFamily: "'Space Mono', monospace",
+          fontFamily: THEME.mono,
           fontWeight: 'bold',
-          fill: '#1a1a2e',
+          fill: THEME.text,
         }}
       >
         {Math.round(percentage)}%
@@ -51,9 +52,9 @@ function StatCard({ children }) {
   return (
     <div
       style={{
-        backgroundColor: '#ffffff',
+        backgroundColor: THEME.surface,
         borderRadius: 14,
-        border: '1px solid #e8e8f0',
+        border: `1px solid ${THEME.border}`,
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
         padding: 16,
         display: 'flex',
@@ -74,24 +75,24 @@ export default function SummaryCards({
   motivationalMessage,
 }) {
   const labelStyle = {
-    fontFamily: "'DM Sans', sans-serif",
+    fontFamily: THEME.sans,
     fontSize: 13,
-    color: '#6b7280',
+    color: THEME.textMuted,
     margin: 0,
   };
 
   const valueStyle = {
-    fontFamily: "'Space Mono', monospace",
+    fontFamily: THEME.mono,
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1a1a2e',
+    color: THEME.text,
     margin: 0,
   };
 
   const subtitleStyle = {
-    fontFamily: "'DM Sans', sans-serif",
+    fontFamily: THEME.sans,
     fontSize: 12,
-    color: '#9ca3af',
+    color: THEME.textFaint,
     margin: 0,
   };
 
@@ -148,8 +149,8 @@ export default function SummaryCards({
         <div
           style={{
             marginTop: 12,
-            backgroundColor: '#f0fdf8',
-            border: '1px solid rgba(167, 243, 208, 0.125)',
+            backgroundColor: THEME.accentTint,
+            border: `1px solid ${THEME.accentSoft}`,
             borderRadius: 10,
             padding: '12px 16px',
             textAlign: 'center',
@@ -157,9 +158,9 @@ export default function SummaryCards({
         >
           <p
             style={{
-              fontFamily: "'DM Sans', sans-serif",
+              fontFamily: THEME.sans,
               fontSize: 14,
-              color: '#065f46',
+              color: THEME.accentText,
               margin: 0,
               lineHeight: 1.5,
             }}

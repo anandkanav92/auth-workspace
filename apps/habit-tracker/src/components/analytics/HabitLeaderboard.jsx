@@ -1,4 +1,5 @@
 import React from 'react';
+import { THEME } from '../../data/constants';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -9,10 +10,10 @@ function HabitLeaderboard({ habitStats, onHabitTap }) {
     <div style={{ marginBottom: 24 }}>
       <div
         style={{
-          fontFamily: "'Space Mono', monospace",
+          fontFamily: THEME.mono,
           fontSize: 11,
           fontWeight: 700,
-          color: '#888',
+          color: THEME.textMuted,
           letterSpacing: '1px',
           textTransform: 'uppercase',
           marginBottom: 8,
@@ -23,9 +24,9 @@ function HabitLeaderboard({ habitStats, onHabitTap }) {
 
       <div
         style={{
-          background: '#fff',
+          background: THEME.surface,
           borderRadius: 14,
-          border: '1px solid #e8e8f0',
+          border: `1px solid ${THEME.border}`,
           padding: '10px 14px',
           display: 'flex',
           flexDirection: 'column',
@@ -50,10 +51,10 @@ function HabitLeaderboard({ habitStats, onHabitTap }) {
               style={{
                 width: 24,
                 textAlign: 'center',
-                fontFamily: "'Space Mono', monospace",
+                fontFamily: THEME.mono,
                 fontSize: 11,
                 fontWeight: 700,
-                color: '#bbb',
+                color: THEME.textFaint,
                 flexShrink: 0,
               }}
             >
@@ -73,10 +74,10 @@ function HabitLeaderboard({ habitStats, onHabitTap }) {
               <span style={{ fontSize: 14, flexShrink: 0 }}>{habit.icon}</span>
               <span
                 style={{
-                  fontFamily: "'DM Sans', sans-serif",
+                  fontFamily: THEME.sans,
                   fontSize: 13,
                   fontWeight: 500,
-                  color: '#333',
+                  color: THEME.text,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -91,7 +92,7 @@ function HabitLeaderboard({ habitStats, onHabitTap }) {
               style={{
                 width: 60,
                 height: 6,
-                background: '#f0f0f8',
+                background: THEME.surfaceAlt,
                 borderRadius: 3,
                 overflow: 'hidden',
                 flexShrink: 0,
@@ -110,10 +111,10 @@ function HabitLeaderboard({ habitStats, onHabitTap }) {
             {/* Percentage */}
             <div
               style={{
-                fontFamily: "'Space Mono', monospace",
+                fontFamily: THEME.mono,
                 fontSize: 11,
                 fontWeight: 700,
-                color: '#555',
+                color: THEME.text,
                 minWidth: 32,
                 textAlign: 'right',
                 flexShrink: 0,

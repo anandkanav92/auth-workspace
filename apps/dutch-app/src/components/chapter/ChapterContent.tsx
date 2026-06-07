@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Chapter } from "@/types/chapter";
+import type { ChapterProgress } from "@/lib/storage";
 import { useStorage } from "@/hooks/useStorage";
 import { DialogueSection } from "./DialogueSection";
 import { VocabularySection } from "./VocabularySection";
@@ -22,9 +23,31 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+// Viewing a content tab marks that section as "studied" so the dashboard's
+// completion bar reflects real activity (not just the quiz).
+const TAB_TO_FIELD: Partial<Record<TabId, keyof ChapterProgress>> = {
+  dialogue: "dialogueRead",
+  vocab: "vocabularyStudied",
+  grammar: "grammarStudied",
+  pronunciation: "pronunciationPracticed",
+  culture: "cultureRead",
+};
+
 export function ChapterContent({ chapter }: { chapter: Chapter }) {
   const [activeTab, setActiveTab] = useState<TabId>("dialogue");
-  const { isAuthenticated } = useStorage();
+  const storage = useStorage();
+  const { isAuthenticated, updateChapterProgress } = storage;
+  // Mark each section studied once per mount (avoids repeated writes on re-clicks)
+  const markedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const field = TAB_TO_FIELD[activeTab];
+    if (!field || markedRef.current.has(field)) return;
+    markedRef.current.add(field);
+    updateChapterProgress(chapter.id, { [field]: true }).catch(() => {
+      markedRef.current.delete(field); // allow retry if the write failed
+    });
+  }, [activeTab, chapter.id, updateChapterProgress]);
 
   return (
     <div>

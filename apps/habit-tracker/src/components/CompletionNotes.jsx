@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { THEME } from "../data/constants";
 
 const EFFORT_LABELS = ["None", "", "", "", "", "Medium", "", "", "", "", "Max"];
 const EFFORT_COLORS = [
@@ -22,10 +23,10 @@ export default function CompletionNotes({ habit, onSave, onSkip }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#ffffff", borderRadius: "20px 20px 0 0",
+          background: THEME.surface, borderRadius: "20px 20px 0 0",
           width: "100%", maxWidth: 600,
           padding: "24px 20px 40px", position: "relative",
-          border: "1px solid #e0e0eb", borderBottom: "none",
+          border: `1px solid ${THEME.border}`, borderBottom: "none",
           boxShadow: "0 -4px 24px rgba(0,0,0,0.08)",
         }}
       >
@@ -38,17 +39,17 @@ export default function CompletionNotes({ habit, onSave, onSkip }) {
         `}</style>
         <div className="notes-inner">
           {/* Drag handle */}
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "#d0d0e0", margin: "0 auto 16px" }} />
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: THEME.borderStrong, margin: "0 auto 16px" }} />
 
           {/* Header */}
           <div style={{ textAlign: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 24, marginBottom: 4 }}>{habit.icon || "✅"}</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a2e" }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: THEME.text }}>
               {habit.name}
             </div>
             <div style={{
-              fontSize: 11, color: "#10B981", fontWeight: 600,
-              fontFamily: "'Space Mono', monospace", marginTop: 2,
+              fontSize: 11, color: THEME.accent, fontWeight: 600,
+              fontFamily: THEME.mono, marginTop: 2,
             }}>
               COMPLETED
             </div>
@@ -61,8 +62,8 @@ export default function CompletionNotes({ habit, onSave, onSkip }) {
               marginBottom: 8,
             }}>
               <span style={{
-                fontSize: 11, fontWeight: 700, color: "#888",
-                fontFamily: "'Space Mono', monospace", letterSpacing: "1px",
+                fontSize: 11, fontWeight: 700, color: THEME.textMuted,
+                fontFamily: THEME.mono, letterSpacing: "1px",
               }}>
                 EFFORT
               </span>
@@ -90,10 +91,10 @@ export default function CompletionNotes({ habit, onSave, onSkip }) {
             <div style={{
               display: "flex", justifyContent: "space-between", marginTop: 4,
             }}>
-              <span style={{ fontSize: 9, color: "#aaa", fontFamily: "'Space Mono', monospace" }}>
+              <span style={{ fontSize: 9, color: THEME.textFaint, fontFamily: THEME.mono }}>
                 No effort
               </span>
-              <span style={{ fontSize: 9, color: "#aaa", fontFamily: "'Space Mono', monospace" }}>
+              <span style={{ fontSize: 9, color: THEME.textFaint, fontFamily: THEME.mono }}>
                 Max effort
               </span>
             </div>
@@ -102,8 +103,8 @@ export default function CompletionNotes({ habit, onSave, onSkip }) {
           {/* Notes textarea */}
           <div style={{ marginBottom: 20 }}>
             <div style={{
-              fontSize: 11, fontWeight: 700, color: "#888",
-              fontFamily: "'Space Mono', monospace", letterSpacing: "1px",
+              fontSize: 11, fontWeight: 700, color: THEME.textMuted,
+              fontFamily: THEME.mono, letterSpacing: "1px",
               marginBottom: 8,
             }}>
               NOTES
@@ -115,10 +116,10 @@ export default function CompletionNotes({ habit, onSave, onSkip }) {
               rows={3}
               style={{
                 width: "100%", padding: "10px 12px",
-                borderRadius: 10, border: "1px solid #e0e0eb",
-                background: "#f9f9fc", fontSize: 13,
-                fontFamily: "'DM Sans', sans-serif",
-                color: "#333", resize: "none", outline: "none",
+                borderRadius: 10, border: `1px solid ${THEME.border}`,
+                background: THEME.surfaceAlt, fontSize: 13,
+                fontFamily: THEME.sans,
+                color: THEME.text, resize: "none", outline: "none",
                 boxSizing: "border-box",
               }}
             />
@@ -130,9 +131,9 @@ export default function CompletionNotes({ habit, onSave, onSkip }) {
               onClick={onSkip}
               style={{
                 flex: 1, padding: "12px 0", borderRadius: 10,
-                border: "1px solid #e0e0eb", background: "#f9f9fc",
-                fontSize: 13, fontWeight: 600, color: "#999",
-                cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
+                border: `1px solid ${THEME.border}`, background: THEME.surfaceAlt,
+                fontSize: 13, fontWeight: 600, color: THEME.textMuted,
+                cursor: "pointer", fontFamily: THEME.sans,
               }}
             >
               Skip
@@ -142,10 +143,10 @@ export default function CompletionNotes({ habit, onSave, onSkip }) {
               style={{
                 flex: 2, padding: "12px 0", borderRadius: 10,
                 border: "none",
-                background: "linear-gradient(135deg, #3B82F6, #2563EB)",
+                background: THEME.accentGradient,
                 fontSize: 13, fontWeight: 600, color: "#fff",
-                cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-                boxShadow: "0 2px 8px rgba(59,130,246,0.3)",
+                cursor: "pointer", fontFamily: THEME.sans,
+                boxShadow: "0 2px 8px rgba(251,113,133,0.3)",
               }}
             >
               Save

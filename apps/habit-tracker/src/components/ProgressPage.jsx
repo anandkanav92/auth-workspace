@@ -3,6 +3,7 @@ import WeeklyChart from "./analytics/WeeklyChart";
 import CategoryBars from "./analytics/CategoryBars";
 import HabitLeaderboard from "./analytics/HabitLeaderboard";
 import Heatmap from "./analytics/Heatmap";
+import { THEME } from "../data/constants";
 
 export default function ProgressPage({ analytics, onHabitTap, onBack }) {
   const {
@@ -27,7 +28,7 @@ export default function ProgressPage({ analytics, onHabitTap, onBack }) {
             style={{
               position: "absolute", left: 0, top: 4,
               background: "none", border: "none",
-              fontSize: 18, color: "#999", cursor: "pointer",
+              fontSize: 18, color: THEME.accent, cursor: "pointer",
               padding: "4px 8px",
             }}
           >
@@ -35,13 +36,13 @@ export default function ProgressPage({ analytics, onHabitTap, onBack }) {
           </button>
         )}
         <h2 style={{
-          fontSize: 18, fontWeight: 700, color: "#1a1a2e", margin: "0 0 2px",
+          fontSize: 18, fontWeight: 700, color: THEME.text, margin: "0 0 2px",
         }}>
           Progress
         </h2>
         <p style={{
-          fontSize: 11, color: "#aaa", margin: 0,
-          fontFamily: "'Space Mono', monospace",
+          fontSize: 11, color: THEME.textFaint, margin: 0,
+          fontFamily: THEME.mono,
         }}>
           Last 30 days
         </p>

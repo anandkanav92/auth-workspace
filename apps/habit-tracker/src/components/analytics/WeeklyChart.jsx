@@ -1,3 +1,5 @@
+import { THEME } from "../../data/constants";
+
 export default function WeeklyChart({ weeklyData }) {
   const BAR_WIDTH = 32;
   const BAR_GAP = 8;
@@ -18,8 +20,8 @@ export default function WeeklyChart({ weeklyData }) {
         style={{
           fontSize: 11,
           fontWeight: 700,
-          fontFamily: "'Space Mono', monospace",
-          color: "#888",
+          fontFamily: THEME.mono,
+          color: THEME.textMuted,
           letterSpacing: 1,
           textTransform: "uppercase",
           marginBottom: 8,
@@ -30,9 +32,9 @@ export default function WeeklyChart({ weeklyData }) {
 
       <div
         style={{
-          background: "#fff",
+          background: THEME.surface,
           borderRadius: 14,
-          border: "1px solid #e8e8f0",
+          border: `1px solid ${THEME.border}`,
           padding: "20px 16px",
         }}
       >
@@ -43,9 +45,9 @@ export default function WeeklyChart({ weeklyData }) {
         >
           <defs>
             <linearGradient id="barGrad" x1="0" y1="1" x2="0" y2="0">
-              <stop offset="0%" stopColor="#E8453C" />
-              <stop offset="50%" stopColor="#3B82F6" />
-              <stop offset="100%" stopColor="#10B981" />
+              <stop offset="0%" stopColor="#F43F5E" />
+              <stop offset="50%" stopColor="#FB7185" />
+              <stop offset="100%" stopColor="#FDA4AF" />
             </linearGradient>
           </defs>
 
@@ -64,8 +66,8 @@ export default function WeeklyChart({ weeklyData }) {
                   textAnchor="middle"
                   style={{
                     fontSize: 10,
-                    fontFamily: "'Space Mono', monospace",
-                    fill: "#888",
+                    fontFamily: THEME.mono,
+                    fill: THEME.textMuted,
                   }}
                 >
                   {day.pct === -1 ? "" : `${day.pct}%`}
@@ -80,7 +82,7 @@ export default function WeeklyChart({ weeklyData }) {
                     height={3}
                     rx={1.5}
                     ry={1.5}
-                    fill="#d0d0d0"
+                    fill={THEME.borderStrong}
                   />
                 ) : barHeight > 0 ? (
                   <rect
@@ -90,7 +92,7 @@ export default function WeeklyChart({ weeklyData }) {
                     height={barHeight}
                     rx={6}
                     ry={6}
-                    fill={day.isToday ? "url(#barGrad)" : "#3B82F6"}
+                    fill={day.isToday ? "url(#barGrad)" : THEME.accent}
                     opacity={day.isToday ? 1 : 0.6}
                   />
                 ) : (
@@ -102,7 +104,7 @@ export default function WeeklyChart({ weeklyData }) {
                     height={3}
                     rx={1.5}
                     ry={1.5}
-                    fill={day.isToday ? "url(#barGrad)" : "#3B82F6"}
+                    fill={day.isToday ? "url(#barGrad)" : THEME.accent}
                     opacity={day.isToday ? 1 : 0.6}
                   />
                 )}
@@ -114,17 +116,17 @@ export default function WeeklyChart({ weeklyData }) {
                   textAnchor="middle"
                   style={{
                     fontSize: 11,
-                    fontFamily: "'Space Mono', monospace",
-                    fill: day.isToday ? "#3B82F6" : "#888",
+                    fontFamily: THEME.mono,
+                    fill: day.isToday ? THEME.accent : THEME.textMuted,
                     fontWeight: day.isToday ? 700 : 400,
                   }}
                 >
                   {day.dayLabel}
                 </text>
 
-                {/* Blue dot below today's label */}
+                {/* Accent dot below today's label */}
                 {day.isToday && (
-                  <circle cx={centerX} cy={barBaseY + 28} r={3} fill="#3B82F6" />
+                  <circle cx={centerX} cy={barBaseY + 28} r={3} fill={THEME.accent} />
                 )}
               </g>
             );

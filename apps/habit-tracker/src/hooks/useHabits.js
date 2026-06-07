@@ -9,7 +9,7 @@ function cutoffDate() {
   return toDateStr(d);
 }
 
-function recordToHabit(r) {
+export function recordToHabit(r) {
   return {
     id: r.id,
     userId: r.userId || "",
@@ -18,6 +18,7 @@ function recordToHabit(r) {
     categoryId: r.categoryId || "",
     days: Array.isArray(r.days) ? r.days : (r.days ? JSON.parse(r.days) : []),
     notes: r.notes || "",
+    time: r.time || null,
     createdAt: r.created,
   };
 }
@@ -61,6 +62,7 @@ async function migrateFromLocalStorage(userId) {
       categoryId: catIdMap[h.categoryId] || h.categoryId || "",
       days: h.days || [],
       notes: h.notes || "",
+      time: h.time || "",
     });
     habitIdMap[h.id] = r.id;
   }
@@ -97,8 +99,8 @@ export function useHabits(userId) {
     async function init() {
       const cutoff = cutoffDate();
       const [habitsRes, catsRes, compsRes, settingsRes] = await Promise.all([
-        pb.collection("habits").getFullList({ filter: `userId='${userId}'`, sort: "created" }),
-        pb.collection("categories").getFullList({ filter: `userId='${userId}'`, sort: "created" }),
+        pb.collection("habits").getFullList({ filter: `userId='${userId}'` }),
+        pb.collection("categories").getFullList({ filter: `userId='${userId}'` }),
         pb.collection("completions").getFullList({ filter: `userId='${userId}' && dateStr>='${cutoff}'` }),
         pb.collection("user_settings").getList(1, 1, { filter: `userId='${userId}'` }).catch(() => ({ items: [] })),
       ]);
@@ -218,6 +220,7 @@ export function useHabits(userId) {
       categoryId: habit.categoryId || "",
       days: habit.days || [],
       notes: habit.notes || "",
+      time: habit.time || "",
     });
   }, [userId]);
 
