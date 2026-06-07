@@ -18,6 +18,20 @@ if (!window.matchMedia) {
   }));
 }
 
+// jsdom implements neither ResizeObserver nor scrollIntoView, both of which cmdk
+// (the command palette in M13) touches on mount/selection. Stub them so command
+// tests render without throwing.
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+
 afterEach(() => {
   cleanup();
 });
