@@ -11,6 +11,7 @@ import { authRoutes } from './routes/auth';
 import { accountRoutes } from './routes/accounts';
 import { holdingRoutes } from './routes/holdings';
 import { transactionRoutes } from './routes/transactions';
+import { importRoutes } from './routes/import';
 import { errorHandler } from './middleware/errorHandler';
 
 // Reviewer fix N4: error tracking. No-op locally (init skipped without a DSN).
@@ -35,6 +36,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/accounts', accountRoutes);
 app.route('/api/holdings', holdingRoutes);
 app.route('/api/transactions', transactionRoutes);
+app.route('/api/import', importRoutes);
 
 // --- Single-container static serving (finalized in M2) ---------------------
 // In production the built web SPA lives next to the compiled server. From
