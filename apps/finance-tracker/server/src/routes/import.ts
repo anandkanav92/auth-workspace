@@ -270,7 +270,7 @@ async function enrichNewTickers(diff: DiffEntry[]): Promise<void> {
           beta: profile.beta,
           dividend_yield: profile.dividendYield,
           sector_weightings: profile.sectorWeightings ?? null,
-          data_source: 'yahoo',
+          data_source: profile.source ?? 'yahoo', // true provenance from the chain
           last_refreshed_at: new Date().toISOString(),
         };
         await symbolProfilesRepo.upsert(row).catch(() => undefined);
@@ -283,7 +283,7 @@ async function enrichNewTickers(diff: DiffEntry[]): Promise<void> {
             currency: quote.currency,
             as_of: quote.asOf.toISOString(),
             last_fetched_at: new Date().toISOString(),
-            data_source: 'yahoo',
+            data_source: quote.source ?? 'yahoo', // true provenance from the chain
           })
           .catch(() => undefined);
       }

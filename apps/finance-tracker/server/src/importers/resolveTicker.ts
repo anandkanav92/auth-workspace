@@ -81,7 +81,7 @@ function toCreate(
     beta: profile.beta,
     dividend_yield: profile.dividendYield,
     sector_weightings: profile.sectorWeightings ?? null,
-    data_source: 'yahoo',
+    data_source: profile.source ?? 'yahoo', // true provenance from the chain
     last_refreshed_at: new Date().toISOString(),
   };
 }

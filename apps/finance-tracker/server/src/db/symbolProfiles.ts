@@ -47,6 +47,25 @@ export class SymbolProfilesRepo extends SharedRepo<
       .catch(() => null);
     return page?.items ?? [];
   }
+
+  /**
+   * ADMIN-SCOPED list of profiles whose `last_refreshed_at` is older than
+   * `cutoff` (ISO datetime) OR has never been set (empty string — PocketBase's
+   * representation of an unset DateField). Backs the weekly profile-refresh cron
+   * (M8.5): "find symbol_profiles with last_refreshed_at < now - 7d, refresh".
+   *
+   * Cron only. Uses a PARAMETERIZED filter (pb.filter).
+   */
+  async listStale(cutoff: string): Promise<SymbolProfile[]> {
+    const pb = await pbAdmin();
+    const filter = pb.filter(
+      'last_refreshed_at < {:cutoff} || last_refreshed_at = ""',
+      { cutoff },
+    );
+    return pb
+      .collection('symbol_profiles')
+      .getFullList<SymbolProfile>({ filter });
+  }
 }
 
 export const symbolProfilesRepo = new SymbolProfilesRepo();

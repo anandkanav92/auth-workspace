@@ -14,7 +14,7 @@ export class FinnhubPriceProvider implements PriceProvider {
     if (!r.ok) return null;
     const j = (await r.json()) as { c?: number; t?: number };
     if (!j.c) return null;
-    return { ticker, price: j.c, currency: 'USD', asOf: new Date((j.t ?? 0) * 1000) };
+    return { ticker, price: j.c, currency: 'USD', asOf: new Date((j.t ?? 0) * 1000), source: this.name };
   }
 
   async profile(ticker: string): Promise<SymbolProfile | null> {
@@ -37,6 +37,7 @@ export class FinnhubPriceProvider implements PriceProvider {
       listingCurrency: j.currency ?? '',
       country: j.country,
       marketCap: j.marketCapitalization != null ? j.marketCapitalization * 1_000_000 : undefined,
+      source: this.name,
     };
   }
 

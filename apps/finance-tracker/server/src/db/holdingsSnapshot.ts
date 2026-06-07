@@ -1,6 +1,7 @@
 // Per-user repo for the `holdings_snapshot` collection. See perUserRepo.ts for
 // shared CRUD + user-scoping logic.
 import { PerUserRepo } from './perUserRepo';
+import { pbAdmin } from '../lib/pb';
 import type {
   HoldingsSnapshot,
   HoldingsSnapshotCreate,
@@ -14,6 +15,34 @@ export class HoldingsSnapshotRepo extends PerUserRepo<
 > {
   constructor() {
     super('holdings_snapshot');
+  }
+
+  /**
+   * ADMIN-SCOPED, ALL-USERS read of every snapshot row whose `date` falls in
+   * [start, end) (half-open, ISO datetime strings). Backs the nightly snapshot
+   * job's idempotency check: one query for "all of today's rows" lets the job
+   * skip holdings already snapshotted today, instead of a query per holding.
+   *
+   * Not request-scoped — cron only. Uses a PARAMETERIZED filter (pb.filter).
+   */
+  async listAllByDateRange(start: string, end: string): Promise<HoldingsSnapshot[]> {
+    const pb = await pbAdmin();
+    const filter = pb.filter('date >= {:start} && date < {:end}', { start, end });
+    return pb
+      .collection(this.collection)
+      .getFullList<HoldingsSnapshot>({ filter });
+  }
+
+  /**
+   * ADMIN-SCOPED, ALL-USERS read of every snapshot row strictly OLDER than
+   * `before` (ISO datetime). Backs the weekly prune job. Cron only.
+   */
+  async listAllOlderThan(before: string): Promise<HoldingsSnapshot[]> {
+    const pb = await pbAdmin();
+    const filter = pb.filter('date < {:before}', { before });
+    return pb
+      .collection(this.collection)
+      .getFullList<HoldingsSnapshot>({ filter });
   }
 }
 

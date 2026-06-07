@@ -27,6 +27,7 @@ export class YahooPriceProvider implements PriceProvider {
       price: s.price.regularMarketPrice,
       currency: s.price.currency!,
       asOf: new Date((s.price.regularMarketTime as Date) || Date.now()),
+      source: this.name,
     };
   }
 
@@ -74,6 +75,7 @@ export class YahooPriceProvider implements PriceProvider {
       beta: s.defaultKeyStatistics?.beta,
       dividendYield: s.summaryDetail?.dividendYield,
       sectorWeightings, // populated only for ETFs
+      source: this.name,
     };
   }
 
