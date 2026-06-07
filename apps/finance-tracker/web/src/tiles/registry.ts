@@ -5,9 +5,9 @@
  * accepting {@link TileProps}. The dashboard maps over this list to render the
  * grid, so adding a tile is one file + one line here — no dashboard changes.
  *
- * Phase 1 tiles 1–3 (Allocation, Concentration, Diversification) are wired here.
- * The remaining tiles (Income, Quality, Treemap) ship in a later dispatch and
- * append to this list.
+ * Phase 1 tiles 1–3 (Allocation, Concentration, Diversification) plus Income,
+ * Quality, and the full-width Treemap (design §7) are wired here. Adding a tile
+ * is one file + one line in this list.
  */
 
 import type { ComponentType } from "react";
@@ -15,12 +15,15 @@ import type { ComponentType } from "react";
 import { Allocation } from "./Allocation";
 import { Concentration } from "./Concentration";
 import { DiversificationScore } from "./DiversificationScore";
+import { Income } from "./Income";
 import type { TileProps } from "./types";
 
 export interface TileDef {
   id: string;
   title: string;
   component: ComponentType<TileProps>;
+  /** Render across the whole grid row (e.g. the Treemap heatmap). */
+  fullWidth?: boolean;
 }
 
 export const PHASE_1_TILES: TileDef[] = [
@@ -31,4 +34,5 @@ export const PHASE_1_TILES: TileDef[] = [
     title: "Diversification",
     component: DiversificationScore,
   },
+  { id: "income", title: "Income", component: Income },
 ];
