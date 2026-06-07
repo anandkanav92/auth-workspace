@@ -16,6 +16,7 @@ import { Allocation } from "./Allocation";
 import { Concentration } from "./Concentration";
 import { DiversificationScore } from "./DiversificationScore";
 import { Income } from "./Income";
+import { Quality } from "./Quality";
 import type { TileProps } from "./types";
 
 export interface TileDef {
@@ -35,4 +36,5 @@ export const PHASE_1_TILES: TileDef[] = [
     component: DiversificationScore,
   },
   { id: "income", title: "Income", component: Income },
+  { id: "quality", title: "Quality", component: Quality },
 ];
