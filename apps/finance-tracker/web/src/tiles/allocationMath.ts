@@ -1,0 +1,106 @@
+/**
+ * Allocation aggregation with ETF look-through (M11.2, spike 3).
+ *
+ * Pure functions (no React) so the look-through math is unit-testable with
+ * fixtures.
+ *
+ * SECTOR look-through:
+ *   - a `stock` contributes its FULL value to its single `sector`.
+ *   - an `etf` DISTRIBUTES its value across `sectorWeightings` (sector → weight).
+ *     Weights are normalised defensively (ETF feeds rarely sum to exactly 1).
+ *   - anything with no usable sector (rare `other`, or an ETF with no
+ *     weightings) goes to an explicit "Uncategorised" bucket (reviewer fix I9).
+ *
+ * COUNTRY: stocks contribute their value to `country`; ETFs lack clean geo data
+ * from Yahoo, so they go to a "Multiple/Diversified" bucket (v1 limitation —
+ * true geo look-through deferred to Phase 2). Missing → "Uncategorised".
+ *
+ * CURRENCY: each position contributes its full value to its price currency.
+ */
+
+import type { Position } from "./types";
+
+export const UNCATEGORISED = "Uncategorised";
+export const DIVERSIFIED = "Multiple/Diversified";
+
+export type AllocationDimension = "sector" | "country" | "currency";
+
+/** One slice of an allocation breakdown. */
+export interface AllocationSlice {
+  name: string;
+  valueEur: number;
+}
+
+/** Sort slices by value desc; ties broken by name for stable output. */
+function sortSlices(map: Map<string, number>): AllocationSlice[] {
+  return [...map.entries()]
+    .map(([name, valueEur]) => ({ name, valueEur }))
+    .sort((a, b) => b.valueEur - a.valueEur || a.name.localeCompare(b.name));
+}
+
+function add(map: Map<string, number>, key: string, value: number): void {
+  if (value <= 0) return;
+  map.set(key, (map.get(key) ?? 0) + value);
+}
+
+/** Sector breakdown with ETF look-through. */
+export function allocateBySector(positions: Position[]): AllocationSlice[] {
+  const map = new Map<string, number>();
+  for (const p of positions) {
+    const weightings = p.sectorWeightings;
+    if (p.assetType === "etf" && weightings && Object.keys(weightings).length) {
+      const total = Object.values(weightings).reduce((s, w) => s + w, 0);
+      if (total > 0) {
+        for (const [sector, weight] of Object.entries(weightings)) {
+          add(map, sector, p.valueEur * (weight / total));
+        }
+        continue;
+      }
+    }
+    if (p.sector) {
+      add(map, p.sector, p.valueEur);
+    } else {
+      add(map, UNCATEGORISED, p.valueEur);
+    }
+  }
+  return sortSlices(map);
+}
+
+/** Country breakdown; ETFs → "Multiple/Diversified" (v1 limitation). */
+export function allocateByCountry(positions: Position[]): AllocationSlice[] {
+  const map = new Map<string, number>();
+  for (const p of positions) {
+    if (p.assetType === "etf") {
+      add(map, DIVERSIFIED, p.valueEur);
+    } else if (p.country) {
+      add(map, p.country, p.valueEur);
+    } else {
+      add(map, UNCATEGORISED, p.valueEur);
+    }
+  }
+  return sortSlices(map);
+}
+
+/** Currency breakdown by each position's price currency. */
+export function allocateByCurrency(positions: Position[]): AllocationSlice[] {
+  const map = new Map<string, number>();
+  for (const p of positions) {
+    add(map, p.priceCurrency || UNCATEGORISED, p.valueEur);
+  }
+  return sortSlices(map);
+}
+
+/** Dispatch to the right breakdown for the active tab. */
+export function allocate(
+  positions: Position[],
+  dimension: AllocationDimension,
+): AllocationSlice[] {
+  switch (dimension) {
+    case "sector":
+      return allocateBySector(positions);
+    case "country":
+      return allocateByCountry(positions);
+    case "currency":
+      return allocateByCurrency(positions);
+  }
+}
