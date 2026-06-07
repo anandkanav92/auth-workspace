@@ -18,6 +18,7 @@ import {
   type AdjustBody,
 } from "@/lib/holdings";
 import { formatEur, formatPct, formatQty } from "@/lib/format";
+import { haptic } from "@/lib/haptics";
 import type { Holding, Position } from "@/tiles/types";
 
 /**
@@ -132,6 +133,7 @@ function DetailView({
       return;
     }
     setError(null);
+    haptic(); // M15.6: confirm-action haptic.
     fullSell.mutate(
       { id: holding.id, body: { price, currency: fullCurrency } },
       {
@@ -326,6 +328,7 @@ function SellForm({
     }
     setError(null);
 
+    haptic(); // M15.6: confirm-action haptic.
     // Snapshot the pre-sell holding so undo can rebuild the exact prior totals.
     const before = holding;
     sell.mutate(
@@ -455,6 +458,7 @@ function EditForm({
       return;
     }
     setError(null);
+    haptic(); // M15.6: confirm-action haptic.
 
     adjust.mutate(
       { id: holding.id, body },

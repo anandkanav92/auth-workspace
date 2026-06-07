@@ -11,6 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useAccounts } from "@/lib/accounts";
+import { haptic } from "@/lib/haptics";
 import {
   addPositionSchema,
   useAddHolding,
@@ -111,6 +112,7 @@ export function AddPositionSheet({
     }
 
     setErrors({});
+    haptic(); // M15.6: confirm-action haptic.
     addHolding.mutate(parsed.data, {
       onSuccess: () => {
         toast.success(`Added ${result.ticker} to your portfolio.`);

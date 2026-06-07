@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { haptic } from "@/lib/haptics";
 import {
   IMPORT_SOURCES,
   useCreateAccount,
@@ -137,13 +139,22 @@ function CreateAccountDialog({
 
   function handleSubmit() {
     if (!canSubmit) return;
+    haptic(); // M15.6: confirm-action haptic.
     createAccount.mutate(
       { source, label: trimmedLabel },
       {
+        // M15.4: toast on every mutation (account creation included).
         onSuccess: (account) => {
           setLabel("");
+          toast.success(`Created “${account.label}”.`);
           onCreated(account);
         },
+        onError: (error) =>
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Could not create the account.",
+          ),
       },
     );
   }

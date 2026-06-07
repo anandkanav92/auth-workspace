@@ -10,6 +10,7 @@ import { ImportPreview } from "@/components/import/ImportPreview";
 import { UploadSkeleton } from "@/components/import/UploadSkeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAccounts } from "@/lib/accounts";
+import { haptic } from "@/lib/haptics";
 import {
   commitImport,
   isAlreadyImported,
@@ -74,6 +75,7 @@ export function ImportPage() {
 
   async function handleConfirm() {
     if (!preview || !selectedAccountId) return;
+    haptic(); // M15.6: confirm-action haptic.
     setStage("committing");
     try {
       const result = await commitImport(preview.previewId);
