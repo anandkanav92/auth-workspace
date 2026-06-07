@@ -1,6 +1,7 @@
 import { SignOutButton } from "@myorg/auth-google";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/lib/useMe";
 
 /**
@@ -34,11 +35,14 @@ export function AppHeader() {
             </span>
             <SignOutButton className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
           </div>
-        ) : (
-          <span className="text-sm text-muted">
-            {isLoading ? "…" : null}
-          </span>
-        )}
+        ) : isLoading ? (
+          // M15.1: skeleton for the identity chip while GET /api/auth/me loads.
+          <div className="flex items-center gap-2" aria-busy="true">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <Skeleton className="hidden h-4 w-32 sm:block" />
+            <Skeleton className="h-8 w-16 rounded-lg" />
+          </div>
+        ) : null}
       </div>
     </header>
   );

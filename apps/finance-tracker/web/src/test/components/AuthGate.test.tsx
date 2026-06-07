@@ -62,7 +62,9 @@ describe("AuthGate", () => {
       </AuthGate>,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent(/loading/i);
+    // M15.1: the loading state is a skeleton (no spinner/text); it exposes its
+    // purpose via role=status + an aria-label rather than visible "Loading…".
+    expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
     expect(screen.queryByText("protected content")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /sign in with google/i }),

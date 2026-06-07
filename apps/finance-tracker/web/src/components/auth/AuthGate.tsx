@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useAuth } from "@myorg/auth-google";
 
 import { LoginPage } from "@/components/auth/LoginPage";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * M10.2 — auth boundary for the app.
@@ -16,13 +17,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
 
   if (loading) {
+    // M15.1: a minimal branded skeleton instead of spinner/text while Firebase
+    // resolves the persisted session (avoids a flash of the login screen).
     return (
       <div
         role="status"
         aria-live="polite"
-        className="flex min-h-screen items-center justify-center bg-bg text-muted"
+        aria-label="Loading"
+        className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg"
       >
-        <span className="text-sm">Loading…</span>
+        <Skeleton className="h-10 w-10 rounded-xl" />
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-3 w-24" />
       </div>
     );
   }

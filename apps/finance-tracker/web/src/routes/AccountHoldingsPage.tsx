@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { HoldingsList } from "@/components/holdings/HoldingsList";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAccounts } from "@/lib/accounts";
 
 /**
@@ -18,8 +19,14 @@ export function AccountHoldingsPage({ id }: { id: string }) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight text-fg">
-        Holdings{label ? ` · ${label}` : ""}
+      <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight text-fg">
+        Holdings
+        {accountsQuery.isLoading ? (
+          // M15.1: skeleton for the account label while accounts load.
+          <Skeleton className="h-5 w-28" />
+        ) : label ? (
+          <span>· {label}</span>
+        ) : null}
       </h1>
       <HoldingsList accountId={id} />
     </div>

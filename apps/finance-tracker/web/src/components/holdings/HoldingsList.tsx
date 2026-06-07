@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { HOLDINGS_KEY } from "@/lib/holdings";
@@ -87,7 +88,12 @@ export function HoldingsList({ accountId }: { accountId: string }) {
 
   if (openPositions.length === 0 && closedPositions.length === 0) {
     return (
-      <p className="text-sm text-muted">No holdings in this account yet.</p>
+      <EmptyState
+        title="No holdings yet"
+        description="Add a position by hand, or import a broker statement into this account."
+        primaryAction={{ label: "Add a position", to: "/import" }}
+        secondaryAction={{ label: "Import", to: "/import" }}
+      />
     );
   }
 
