@@ -196,6 +196,11 @@ async function commitPreview(preview: PreviewRecord): Promise<void> {
     await holdingsRepo.delete(h.id);
   }
   for (const pos of preview.positions) {
+    // NOTE for the P&L tiles (M11): PocketBase's NumberField coerces a written
+    // null cost_basis to 0 on read, so 0 is NOT a reliable "no cost data" signal.
+    // The reliable marker is the (TextField) cost_currency staying EMPTY —
+    // Revolut positions have no cost_currency. Tiles must exclude positions with
+    // an empty cost_currency from return aggregation (spike 2).
     await holdingsRepo.create({
       user: preview.pbUserId,
       account: preview.account,
