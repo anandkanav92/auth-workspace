@@ -110,3 +110,58 @@ describe("buildPortfolio", () => {
     expect(p.costlessCount).toBe(0);
   });
 });
+
+describe("buildPortfolio with an empty/absent FX cache", () => {
+  // The shape `usePortfolioData` falls back to when `/api/fx` returns null
+  // (before the first FX cron run, or during an FX outage). Building must NOT
+  // blow up or return nothing — it must degrade to rate 1.
+  const emptyFx = { rates: {} };
+
+  const eurHolding: Holding = {
+    id: "h_eur",
+    account: "acc_t212",
+    ticker: "IWDA",
+    quantity: 2,
+    cost_basis: 150,
+    cost_currency: "EUR",
+    source: "trading212",
+  };
+
+  const emptyFxInputs: PortfolioInputs = {
+    accounts: [{ id: "acc_t212", source: "trading212", label: "T212 ISA" }],
+    holdings: [eurHolding, t212Aapl],
+    prices: [
+      { ticker: "IWDA", price: 100, currency: "EUR" }, // 2 × 100 EUR = 200 EUR
+      { ticker: "AAPL", price: 220, currency: "USD" }, // 10 × 220 USD, no USD rate
+    ],
+    profiles: [
+      { ticker: "IWDA", asset_type: "etf", name: "iShares Core MSCI World" },
+      { ticker: "AAPL", asset_type: "stock", name: "Apple" },
+    ],
+    fx: emptyFx,
+  };
+
+  it("still produces a portfolio instead of undefined", () => {
+    const p = buildPortfolio(emptyFxInputs);
+    expect(p).toBeDefined();
+    expect(p.positions).toHaveLength(2);
+  });
+
+  it("values EUR positions correctly (rate 1)", () => {
+    const p = buildPortfolio(emptyFxInputs);
+    const iwda = p.positions.find((x) => x.ticker === "IWDA")!;
+    expect(iwda.valueEur).toBeCloseTo(200, 6);
+    // EUR cost basis is unaffected by the missing FX cache.
+    expect(iwda.costEur).toBeCloseTo(150, 6);
+  });
+
+  it("degrades unknown currencies to rate 1 rather than blanking", () => {
+    const p = buildPortfolio(emptyFxInputs);
+    const aapl = p.positions.find((x) => x.ticker === "AAPL")!;
+    // No USD rate in the empty cache → treated as 1:1 (10 × 220 = 2200).
+    expect(aapl.valueEur).toBeCloseTo(2200, 6);
+    // cost_basis 1100 USD also falls back to rate 1.
+    expect(aapl.costEur).toBeCloseTo(1100, 6);
+    expect(aapl.returnEur).toBeCloseTo(1100, 6);
+  });
+});

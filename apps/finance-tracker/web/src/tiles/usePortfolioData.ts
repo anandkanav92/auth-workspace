@@ -77,22 +77,31 @@ export function usePortfolioData(
       },
       {
         queryKey: FX_KEY,
-        queryFn: () => api.get<FxRates>("/api/fx"),
+        // `/api/fx` returns a single `{ rates }` object — or `null` before the
+        // first FX cron run / during an FX outage. We treat that as non-blocking.
+        queryFn: () => api.get<FxRates | null>("/api/fx"),
         staleTime: 60 * 60_000,
       },
     ],
     combine: (results) => {
       const [holdings, accounts, prices, profiles, fx] = results;
-      const isLoading = results.some((r) => r.isLoading);
-      const isError = results.some((r) => r.isError);
+
+      // FX is intentionally NOT gated on loading/error: a null/absent FX cache
+      // is legitimate (before the first FX cron run, or during an FX outage).
+      // buildPortfolio's fxToEur defaults unknown currencies to rate 1, so the
+      // dashboard degrades gracefully (no FX row; non-EUR positions valued at
+      // rate 1) rather than blanking the whole page. Only the four core inputs
+      // gate loading/error.
+      const core = [holdings, accounts, prices, profiles];
+      const isLoading = core.some((r) => r.isLoading);
+      const isError = core.some((r) => r.isError);
 
       if (
         isError ||
         !holdings.data ||
         !accounts.data ||
         !prices.data ||
-        !profiles.data ||
-        !fx.data
+        !profiles.data
       ) {
         return { data: undefined, isLoading, isError };
       }
@@ -103,7 +112,7 @@ export function usePortfolioData(
           accounts: accounts.data,
           prices: prices.data,
           profiles: profiles.data,
-          fx: fx.data,
+          fx: fx.data ?? { rates: {} },
         },
         accountIds,
       );
