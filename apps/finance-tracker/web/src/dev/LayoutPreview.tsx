@@ -7,7 +7,6 @@ import { HeroStrip } from "@/components/layout/HeroStrip";
 import { TileGrid } from "@/components/layout/TileGrid";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { formatEur, formatPct } from "@/lib/format";
 
 /**
  * DEV-ONLY visual QA surface for the layout shell (milestone 9.6).
@@ -54,9 +53,9 @@ function ShellPreview() {
     <div className="relative h-[640px] overflow-hidden bg-bg text-fg">
       <div className="h-full space-y-4 overflow-y-auto px-4 pb-28 pt-4">
         <HeroStrip
-          totalValue={formatEur(48213.55)}
-          changeAbs={`+${formatEur(1240.5)}`}
-          changePct={formatPct(0.0264)}
+          totalValueEur={48213.55}
+          changeEur={1240.5}
+          changePct={0.0264}
           direction="up"
         />
 

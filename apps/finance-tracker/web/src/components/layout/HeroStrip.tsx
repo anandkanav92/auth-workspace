@@ -1,28 +1,39 @@
 import { TrendingDown, TrendingUp } from "lucide-react";
 
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { formatEur, formatPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export interface HeroStripProps {
-  /** Total portfolio value, in euros (pre-formatted display string). */
-  totalValue: string;
-  /** Period change as a display string, e.g. "+€1,240.50". */
-  changeAbs: string;
-  /** Period change percentage as a display string, e.g. "+3.2%". */
-  changePct: string;
+  /** Total portfolio value, in euros (raw number — animated + formatted here). */
+  totalValueEur: number;
+  /** Period change in euros (raw number — animated + formatted here). */
+  changeEur: number;
+  /** Period change as a ratio (0.032 → +3,20%), or null when cost is missing. */
+  changePct: number | null;
   /** Sign of the change — drives colour + icon. */
   direction: "up" | "down" | "flat";
   /** Caption describing the comparison window, e.g. "Today". */
   periodLabel?: string;
 }
 
+/** Format a signed euro delta, e.g. +€ 1.240,50 (sign always shown). */
+function formatSignedEur(value: number): string {
+  return `${value >= 0 ? "+" : "−"}${formatEur(Math.abs(value))}`;
+}
+
 /**
  * Top-of-dashboard summary: total value, the period delta, and a placeholder
  * sparkline area. Real sparkline rendering arrives with the charts milestone;
  * for now we paint a token-coloured gradient strip so the layout reads true.
+ *
+ * M15.2: the total + the change tween between values (count-up) when the
+ * underlying portfolio refreshes, via {@link AnimatedNumber}. Subtle by design —
+ * it only animates *changes*, not the first paint, and respects reduced motion.
  */
 export function HeroStrip({
-  totalValue,
-  changeAbs,
+  totalValueEur,
+  changeEur,
   changePct,
   direction,
   periodLabel = "Today",
@@ -44,14 +55,22 @@ export function HeroStrip({
       className="rounded-xl bg-surface p-5 shadow-sm md:p-6"
     >
       <p className="text-sm font-medium text-muted">Total value</p>
-      <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-fg md:text-4xl">
-        {totalValue}
-      </p>
+      <AnimatedNumber
+        value={totalValueEur}
+        format={formatEur}
+        className="mt-1 block text-3xl font-semibold tabular-nums tracking-tight text-fg md:text-4xl"
+      />
 
       <div className={cn("mt-2 flex items-center gap-1.5 text-sm font-medium", deltaColor)}>
         {DeltaIcon ? <DeltaIcon className="h-4 w-4" aria-hidden /> : null}
-        <span className="tabular-nums">{changeAbs}</span>
-        <span className="tabular-nums">({changePct})</span>
+        <AnimatedNumber
+          value={changeEur}
+          format={formatSignedEur}
+          className="tabular-nums"
+        />
+        <span className="tabular-nums">
+          ({changePct !== null ? formatPct(changePct) : "—"})
+        </span>
         <span className="text-muted">· {periodLabel}</span>
       </div>
 

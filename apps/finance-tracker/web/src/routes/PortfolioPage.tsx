@@ -6,8 +6,8 @@ import {
 } from "@/components/layout/AccountTabs";
 import { HeroStrip } from "@/components/layout/HeroStrip";
 import { TileGrid } from "@/components/layout/TileGrid";
-import { Skeleton } from "@/components/ui/skeleton";
-import { formatEur, formatPct } from "@/lib/format";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PortfolioPageSkeleton } from "@/routes/PortfolioPageSkeleton";
 import { PHASE_1_TILES } from "@/tiles/registry";
 import { usePortfolioData } from "@/tiles/usePortfolioData";
 
@@ -19,6 +19,13 @@ import { usePortfolioData } from "@/tiles/usePortfolioData";
  * registered tile; each tile loads + joins its own data via `usePortfolioData`
  * (which TanStack Query dedupes across tiles) and renders its own skeleton while
  * loading. The hero strip is driven by the same joined portfolio.
+ *
+ * M15.1: while the FIRST load is in flight we show a full-page skeleton (hero +
+ * tile grid placeholders) instead of a lone hero skeleton, so the layout doesn't
+ * pop in two stages.
+ * M15.3: empty states — when the user has no accounts at all, or the selected
+ * scope holds no positions, we render a single clear CTA instead of a grid of
+ * empty tiles.
  */
 export function PortfolioPage() {
   // "all" or a single account id. Tiles take an accountIds list.
@@ -29,7 +36,8 @@ export function PortfolioPage() {
 
   // The account list comes from the same join (unscoped tab set is fine — we
   // always want every account selectable, so derive it from the "all" portfolio).
-  const allAccounts = usePortfolioData("all").data?.accounts ?? [];
+  const allPortfolio = usePortfolioData("all");
+  const allAccounts = allPortfolio.data?.accounts ?? [];
   const tabs: AccountTab[] = useMemo(
     () => [
       { id: "all", label: "All" },
@@ -38,26 +46,36 @@ export function PortfolioPage() {
     [allAccounts],
   );
 
-  const direction = (data?.totalReturnEur ?? 0) >= 0 ? "up" : "down";
+  // First load (no joined data yet): full-page skeleton.
+  if (isLoading || !data) {
+    return <PortfolioPageSkeleton />;
+  }
+
+  // No accounts at all → onboarding CTA (M15.3). Checked against the unscoped
+  // portfolio so it holds regardless of the active tab.
+  if (allAccounts.length === 0) {
+    return (
+      <EmptyState
+        title="No accounts yet"
+        description="Add your first account, or upload a broker statement to get started."
+        primaryAction={{ label: "Add your first account", to: "/import" }}
+        secondaryAction={{ label: "Upload a statement", to: "/import" }}
+      />
+    );
+  }
+
+  const direction = data.totalReturnEur >= 0 ? "up" : "down";
 
   return (
     <div className="space-y-4">
-      {isLoading || !data ? (
-        <Skeleton className="h-24 w-full rounded-xl" />
-      ) : (
-        <HeroStrip
-          totalValue={formatEur(data.totalValueEur)}
-          changeAbs={`${data.totalReturnEur >= 0 ? "+" : ""}${formatEur(
-            data.totalReturnEur,
-          )}`}
-          changePct={
-            data.totalReturnPct !== null ? formatPct(data.totalReturnPct) : "—"
-          }
-          direction={direction}
-        />
-      )}
+      <HeroStrip
+        totalValueEur={data.totalValueEur}
+        changeEur={data.totalReturnEur}
+        changePct={data.totalReturnPct}
+        direction={direction}
+      />
 
-      {data && data.costlessCount > 0 ? (
+      {data.costlessCount > 0 ? (
         <p className="px-1 text-xs text-muted">
           Return excludes {data.costlessCount} position
           {data.costlessCount === 1 ? "" : "s"} without cost data (e.g. Revolut).
@@ -70,16 +88,25 @@ export function PortfolioPage() {
         onSelect={setActiveAccount}
       />
 
-      <TileGrid>
-        {PHASE_1_TILES.map(({ id, component: Tile, fullWidth }) => (
-          <div
-            key={id}
-            className={fullWidth ? "md:col-span-2 xl:col-span-3" : undefined}
-          >
-            <Tile accountIds={accountIds} />
-          </div>
-        ))}
-      </TileGrid>
+      {data.positions.length === 0 ? (
+        <EmptyState
+          title="No positions in this account"
+          description="Add a position by hand, or import a statement to fill it in."
+          primaryAction={{ label: "Add a position", to: "/import" }}
+          secondaryAction={{ label: "Import", to: "/import" }}
+        />
+      ) : (
+        <TileGrid>
+          {PHASE_1_TILES.map(({ id, component: Tile, fullWidth }) => (
+            <div
+              key={id}
+              className={fullWidth ? "md:col-span-2 xl:col-span-3" : undefined}
+            >
+              <Tile accountIds={accountIds} />
+            </div>
+          ))}
+        </TileGrid>
+      )}
     </div>
   );
 }
