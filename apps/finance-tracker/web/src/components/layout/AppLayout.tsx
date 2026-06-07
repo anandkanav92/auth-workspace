@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { AppHeader } from "@/components/layout/AppHeader";
 import {
@@ -8,6 +9,7 @@ import {
 } from "@/components/layout/BottomTabBar";
 import { FabMenu } from "@/components/layout/FabMenu";
 import { SearchCommand, SearchOverlay } from "@/components/search/SearchCommand";
+import { PullToRefresh } from "@/components/ui/PullToRefresh";
 import { useCommandShortcut } from "@/lib/useCommandShortcut";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -40,6 +42,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isMobile = useIsMobile();
+  const queryClient = useQueryClient();
 
   // The Cmd-K command palette (desktop) and the full-screen overlay (mobile)
   // share one open-state; the trigger differs but they show the same search.
@@ -61,12 +64,35 @@ export function AppLayout() {
     navigate({ to: TAB_TO_PATH[id] });
   }
 
+  // M15.5: pull-to-refresh on the main scroll region. It refetches the shared
+  // portfolio queries (holdings/prices/profiles/fx) + accounts + me, which is
+  // exactly what every dashboard + holdings surface reads from — so one handler
+  // covers the portfolio AND the holdings pages without per-route wiring.
+  const refresh = useCallback(
+    () =>
+      Promise.all([
+        queryClient.refetchQueries({ queryKey: ["holdings"] }),
+        queryClient.refetchQueries({ queryKey: ["prices"] }),
+        queryClient.refetchQueries({ queryKey: ["profiles"] }),
+        queryClient.refetchQueries({ queryKey: ["fx"] }),
+        queryClient.refetchQueries({ queryKey: ["accounts"] }),
+      ]),
+    [queryClient],
+  );
+
   return (
-    <div className="min-h-screen bg-bg text-fg">
+    // h-screen + a scrollable <main> (rather than document scroll) so the page
+    // content hosts a pull-to-refresh region (M15.5). The header stays pinned;
+    // the bottom bar + FAB are fixed and overlay the scroll area.
+    <div className="flex h-screen flex-col bg-bg text-fg">
       <AppHeader />
 
-      <main className="mx-auto max-w-2xl px-4 pb-28 pt-4">
-        <Outlet />
+      <main className="min-h-0 flex-1">
+        <PullToRefresh onRefresh={refresh} className="h-full">
+          <div className="mx-auto max-w-2xl px-4 pb-28 pt-4">
+            <Outlet />
+          </div>
+        </PullToRefresh>
       </main>
 
       <FabMenu
