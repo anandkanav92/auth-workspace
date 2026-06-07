@@ -122,8 +122,14 @@ export function Allocation({ accountIds }: TileProps) {
         <TileEmpty message="No positions to allocate yet." />
       ) : (
         <div>
-          <LazyChart option={option} ariaLabel={`Allocation by ${dimension}`} />
-          <ul className="mt-3 space-y-1.5">
+          <LazyChart
+            option={option}
+            style={{ height: 150 }}
+            ariaLabel={`Allocation by ${dimension}`}
+          />
+          {/* Two-column legend keeps the tile compact (and the same height as its
+              row-mates) instead of a tall single column that overflowed. */}
+          <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
             {legend.map((s, i) => {
               const isOther = i === 5 && slices.length > 6;
               return (
