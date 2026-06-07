@@ -15,7 +15,9 @@ import type { ComponentType } from "react";
 import { Allocation } from "./Allocation";
 import { Concentration } from "./Concentration";
 import { DiversificationScore } from "./DiversificationScore";
+import { Health } from "./Health";
 import { Income } from "./Income";
+import { Movers } from "./Movers";
 import { Quality } from "./Quality";
 import { Treemap } from "./Treemap";
 import type { TileProps } from "./types";
@@ -36,6 +38,8 @@ export const PHASE_1_TILES: TileDef[] = [
     title: "Diversification",
     component: DiversificationScore,
   },
+  { id: "movers", title: "Movers", component: Movers },
+  { id: "health", title: "Health checks", component: Health },
   { id: "income", title: "Income", component: Income },
   { id: "quality", title: "Quality", component: Quality },
   { id: "treemap", title: "Heatmap", component: Treemap, fullWidth: true },

@@ -23,7 +23,12 @@ import type { Position } from "./types";
 export const UNCATEGORISED = "Uncategorised";
 export const DIVERSIFIED = "Multiple/Diversified";
 
-export type AllocationDimension = "sector" | "country" | "currency";
+export type AllocationDimension =
+  | "sector"
+  | "country"
+  | "currency"
+  | "assetType"
+  | "cap";
 
 /**
  * Canonical, human-readable sector labels keyed by a normalised form
@@ -130,6 +135,48 @@ export function allocateByCurrency(positions: Position[]): AllocationSlice[] {
   return sortSlices(map);
 }
 
+const ASSET_TYPE_LABELS: Record<string, string> = {
+  stock: "Stocks",
+  etf: "ETFs / Funds",
+  other: "Other",
+};
+
+/** Asset-type breakdown: stocks vs ETFs/funds vs other. */
+export function allocateByAssetType(positions: Position[]): AllocationSlice[] {
+  const map = new Map<string, number>();
+  for (const p of positions) {
+    add(map, ASSET_TYPE_LABELS[p.assetType] ?? "Other", p.valueEur);
+  }
+  return sortSlices(map);
+}
+
+/** Market-cap bands (USD), the conventional large/mid/small breakpoints. */
+const LARGE_CAP = 10e9;
+const MID_CAP = 2e9;
+
+/**
+ * Size breakdown by market cap. ETFs/funds and positions without a market cap
+ * (Yahoo returns none for funds) go to a single "Funds / N/A" band rather than
+ * polluting the equity size bands.
+ */
+export function allocateByCap(positions: Position[]): AllocationSlice[] {
+  const map = new Map<string, number>();
+  for (const p of positions) {
+    let band: string;
+    if (p.assetType === "etf" || !p.marketCap || p.marketCap <= 0) {
+      band = "Funds / N/A";
+    } else if (p.marketCap >= LARGE_CAP) {
+      band = "Large cap";
+    } else if (p.marketCap >= MID_CAP) {
+      band = "Mid cap";
+    } else {
+      band = "Small cap";
+    }
+    add(map, band, p.valueEur);
+  }
+  return sortSlices(map);
+}
+
 /** Dispatch to the right breakdown for the active tab. */
 export function allocate(
   positions: Position[],
@@ -142,5 +189,9 @@ export function allocate(
       return allocateByCountry(positions);
     case "currency":
       return allocateByCurrency(positions);
+    case "assetType":
+      return allocateByAssetType(positions);
+    case "cap":
+      return allocateByCap(positions);
   }
 }

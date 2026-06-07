@@ -4,6 +4,8 @@ import {
   allocateBySector,
   allocateByCountry,
   allocateByCurrency,
+  allocateByAssetType,
+  allocateByCap,
   normalizeSector,
   DIVERSIFIED,
   UNCATEGORISED,
@@ -140,6 +142,33 @@ describe("allocateByCountry", () => {
     const byName = new Map(slices.map((s) => [s.name, s.valueEur]));
     expect(byName.get("United States")).toBeCloseTo(1500, 6); // AAPL + JPM
     expect(byName.get(DIVERSIFIED)).toBeCloseTo(1000, 6); // VWRL
+  });
+});
+
+describe("allocateByAssetType", () => {
+  it("buckets stocks vs ETFs/funds vs other", () => {
+    const byName = new Map(
+      allocateByAssetType(positions).map((s) => [s.name, s.valueEur]),
+    );
+    expect(byName.get("Stocks")).toBeCloseTo(1500, 6); // AAPL + JPM
+    expect(byName.get("ETFs / Funds")).toBeCloseTo(1000, 6); // VWRL
+  });
+});
+
+describe("allocateByCap (market-cap bands)", () => {
+  it("bands stocks by market cap and routes funds/no-cap to Funds / N/A", () => {
+    const large = pos({ ticker: "BIG", valueEur: 100, assetType: "stock", marketCap: 50e9 });
+    const mid = pos({ ticker: "MID", valueEur: 100, assetType: "stock", marketCap: 5e9 });
+    const small = pos({ ticker: "SML", valueEur: 100, assetType: "stock", marketCap: 1e9 });
+    const fund = pos({ ticker: "ETF", valueEur: 100, assetType: "etf" });
+    const noCap = pos({ ticker: "NOC", valueEur: 100, assetType: "stock" }); // no marketCap
+    const byName = new Map(
+      allocateByCap([large, mid, small, fund, noCap]).map((s) => [s.name, s.valueEur]),
+    );
+    expect(byName.get("Large cap")).toBeCloseTo(100, 6);
+    expect(byName.get("Mid cap")).toBeCloseTo(100, 6);
+    expect(byName.get("Small cap")).toBeCloseTo(100, 6);
+    expect(byName.get("Funds / N/A")).toBeCloseTo(200, 6); // ETF + no-cap stock
   });
 });
 

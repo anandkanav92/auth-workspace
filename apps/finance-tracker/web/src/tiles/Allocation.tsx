@@ -14,6 +14,8 @@ const TABS: { id: AllocationDimension; label: string }[] = [
   { id: "sector", label: "Sector" },
   { id: "country", label: "Country" },
   { id: "currency", label: "Currency" },
+  { id: "assetType", label: "Type" },
+  { id: "cap", label: "Size" },
 ];
 
 // A calm, distinguishable palette that reads on both themes.
@@ -91,31 +93,33 @@ export function Allocation({ accountIds }: TileProps) {
   );
 
   return (
-    <TileCard
-      title="Allocation"
-      infoHash="allocation"
-      action={
-        <div className="flex gap-1" role="tablist" aria-label="Allocation dimension">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={dimension === t.id}
-              onClick={() => setDimension(t.id)}
-              className={cn(
-                "rounded-md px-2 py-1 text-xs font-medium transition-colors",
-                dimension === t.id
-                  ? "bg-accent text-accent-fg"
-                  : "text-muted hover:text-fg",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      }
-    >
+    <TileCard title="Allocation" infoHash="allocation">
+      {/* Full-width, horizontally-scrollable dimension tabs BELOW the title —
+          the old header-action row truncated once there were >3 dimensions. */}
+      <div
+        role="tablist"
+        aria-label="Allocation dimension"
+        className="-mx-1 mb-3 flex gap-1 overflow-x-auto px-1 pb-1"
+      >
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={dimension === t.id}
+            onClick={() => setDimension(t.id)}
+            className={cn(
+              "shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              dimension === t.id
+                ? "bg-accent text-accent-fg"
+                : "text-muted hover:text-fg",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {isLoading ? (
         <TileSkeleton />
       ) : slices.length === 0 ? (

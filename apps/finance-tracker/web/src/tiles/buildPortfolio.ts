@@ -98,6 +98,7 @@ function toPosition(
     sector: profile?.sector,
     country: profile?.country,
     sectorWeightings: profile?.sector_weightings ?? null,
+    marketCap: profile?.market_cap,
     pe: profile?.pe_ratio,
     beta: profile?.beta,
     dividendYield: profile?.dividend_yield,

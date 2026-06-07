@@ -108,6 +108,8 @@ export interface Position {
   sector?: string;
   country?: string;
   sectorWeightings?: Record<string, number> | null;
+  /** Market capitalisation in the listing currency (drives the Size breakdown). */
+  marketCap?: number;
   pe?: number;
   beta?: number;
   dividendYield?: number;

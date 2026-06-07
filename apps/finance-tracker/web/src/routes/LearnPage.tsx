@@ -1,11 +1,13 @@
 import { useEffect, type ReactNode } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import {
+  ArrowUpDown,
   Coins,
   Gauge,
   Layers,
   PieChart,
   Share2,
+  ShieldCheck,
   TrendingUp,
   Wallet,
   type LucideIcon,
@@ -170,6 +172,20 @@ export function LearnPage() {
       </MetricSection>
 
       <MetricSection
+        id="movers"
+        icon={ArrowUpDown}
+        title="Movers"
+        lede="Your biggest winners and losers, by percentage return."
+        formula="ranked by (current value − cost) ÷ cost"
+      >
+        <p>
+          We rank each position by its unrealised return and surface the top
+          gainers and losers. Like Total return, this needs a cost basis — so it
+          covers your Trading 212 holdings, not cost-less Revolut positions.
+        </p>
+      </MetricSection>
+
+      <MetricSection
         id="diversification"
         icon={Share2}
         title="Diversification — effective holdings"
@@ -186,6 +202,22 @@ export function LearnPage() {
           number drops well below your real count. The sub-scores apply the same
           idea to sector, geography, and currency — the closer each is to its raw
           count, the more evenly you&rsquo;re spread.
+        </p>
+      </MetricSection>
+
+      <MetricSection
+        id="health"
+        icon={ShieldCheck}
+        title="Health checks"
+        lede="Quick concentration guardrails, as a pass/warn checklist."
+        formula="largest position ≤ 10% · top sector ≤ 30% · top country ≤ 60%"
+      >
+        <p>
+          A handful of rules of thumb from common diversification guidance: no
+          single position dominating (over ~10%), no sector over ~30%, and no
+          single country over ~60% (a home/foreign-bias flag). We also check that
+          every position has a live price. An amber flag is a nudge to look, not a
+          verdict — concentration can be deliberate.
         </p>
       </MetricSection>
 
