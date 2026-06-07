@@ -2,6 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 
 import { AuthGate } from "@/components/auth/AuthGate";
+import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/lib/theme";
 import { queryClient } from "@/lib/queryClient";
 import { router } from "@/router";
@@ -32,6 +33,8 @@ function App() {
             <RouterProvider router={router} />
           </AuthGate>
         )}
+        {/* Toast host (M9 Sonner) — drives import/mutation feedback. */}
+        <Toaster />
       </QueryClientProvider>
     </ThemeProvider>
   );
