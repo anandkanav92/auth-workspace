@@ -17,6 +17,7 @@ import { Concentration } from "./Concentration";
 import { DiversificationScore } from "./DiversificationScore";
 import { Income } from "./Income";
 import { Quality } from "./Quality";
+import { Treemap } from "./Treemap";
 import type { TileProps } from "./types";
 
 export interface TileDef {
@@ -37,4 +38,5 @@ export const PHASE_1_TILES: TileDef[] = [
   },
   { id: "income", title: "Income", component: Income },
   { id: "quality", title: "Quality", component: Quality },
+  { id: "treemap", title: "Heatmap", component: Treemap, fullWidth: true },
 ];

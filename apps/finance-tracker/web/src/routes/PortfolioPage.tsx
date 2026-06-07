@@ -71,8 +71,13 @@ export function PortfolioPage() {
       />
 
       <TileGrid>
-        {PHASE_1_TILES.map(({ id, component: Tile }) => (
-          <Tile key={id} accountIds={accountIds} />
+        {PHASE_1_TILES.map(({ id, component: Tile, fullWidth }) => (
+          <div
+            key={id}
+            className={fullWidth ? "md:col-span-2 xl:col-span-3" : undefined}
+          >
+            <Tile accountIds={accountIds} />
+          </div>
         ))}
       </TileGrid>
     </div>
