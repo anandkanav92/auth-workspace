@@ -20,14 +20,38 @@ const Command = React.forwardRef<
 ));
 Command.displayName = CommandPrimitive.displayName;
 
+/**
+ * Command palette in a centred Dialog. Accepts the Dialog's `open`/`onOpenChange`
+ * plus any `Command`/cmdk props (e.g. `shouldFilter`), forwarding the latter to
+ * the inner `Command` so callers can disable cmdk's built-in filtering when the
+ * results are already filtered upstream (M13 server-side ticker search).
+ */
+type CommandDialogProps = React.ComponentProps<typeof Dialog> &
+  Pick<
+    React.ComponentPropsWithoutRef<typeof CommandPrimitive>,
+    "shouldFilter" | "filter" | "value" | "onValueChange" | "label"
+  >;
+
 function CommandDialog({
   children,
+  shouldFilter,
+  filter,
+  value,
+  onValueChange,
+  label,
   ...props
-}: React.ComponentProps<typeof Dialog>) {
+}: CommandDialogProps) {
   return (
     <Dialog {...props}>
       <DialogContent className="overflow-hidden p-0">
-        <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+        <Command
+          shouldFilter={shouldFilter}
+          filter={filter}
+          value={value}
+          onValueChange={onValueChange}
+          label={label}
+          className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"
+        >
           {children}
         </Command>
       </DialogContent>
