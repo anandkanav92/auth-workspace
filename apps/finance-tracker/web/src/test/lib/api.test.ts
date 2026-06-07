@@ -91,6 +91,25 @@ describe("apiFetch", () => {
     expect(apiErr.message).toContain("500");
   });
 
+  it("sends FormData untouched without forcing a JSON Content-Type", async () => {
+    currentUserRef.value = { uid: "u1" };
+    getIdTokenMock.mockResolvedValue("tok-123");
+    fetchMock.mockResolvedValue(jsonResponse({ previewId: "p1" }, { status: 200 }));
+
+    const form = new FormData();
+    form.append("file", new Blob(["pdf"], { type: "application/pdf" }), "s.pdf");
+    form.append("accountId", "acc-1");
+
+    await api.post("/api/import/upload", form);
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.body).toBe(form);
+    const headers = new Headers(init.headers);
+    // The browser must set the multipart Content-Type (with boundary) itself.
+    expect(headers.has("Content-Type")).toBe(false);
+    expect(headers.get("Authorization")).toBe("Bearer tok-123");
+  });
+
   it("serialises a JSON body and sets Content-Type for posts", async () => {
     currentUserRef.value = { uid: "u1" };
     getIdTokenMock.mockResolvedValue("tok-123");

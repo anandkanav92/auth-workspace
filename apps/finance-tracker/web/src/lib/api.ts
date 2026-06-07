@@ -43,7 +43,11 @@ async function resolveIdToken(): Promise<string | null> {
 }
 
 export interface ApiRequestOptions extends Omit<RequestInit, "body"> {
-  /** JSON-serialisable request body; sets Content-Type automatically. */
+  /**
+   * Request body. A `FormData` value is sent as-is for multipart uploads (the
+   * browser sets `Content-Type: multipart/form-data` with the correct
+   * boundary); anything else is JSON-serialised with a JSON Content-Type.
+   */
   body?: unknown;
 }
 
@@ -68,7 +72,12 @@ export async function apiFetch<T>(
   }
 
   let serialisedBody: BodyInit | undefined;
-  if (body !== undefined) {
+  if (body instanceof FormData) {
+    // Multipart: send the FormData untouched and let the browser set the
+    // Content-Type header (it must include the multipart boundary, which we
+    // can't compute ourselves). Setting it manually would break the upload.
+    serialisedBody = body;
+  } else if (body !== undefined) {
     serialisedBody = JSON.stringify(body);
     if (!finalHeaders.has("Content-Type")) {
       finalHeaders.set("Content-Type", "application/json");
