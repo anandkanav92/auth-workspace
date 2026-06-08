@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Trading212Provider } from '../../src/providers/trading212';
+import { Trading212Provider, Trading212ApiError } from '../../src/providers/trading212';
 
 // Fixtures are HAND-AUTHORED from the validated schemas in
 // docs/spikes/2026-06-08-t212-api-results.md (no key committed; network mocked).
@@ -12,6 +12,8 @@ interface Route {
   status?: number;
   body?: unknown;
   headers?: Record<string, string>;
+  /** When true, `res.json()` rejects — simulates a malformed/truncated 200 body. */
+  jsonThrows?: boolean;
 }
 
 /** Mock globalThis.fetch, matching by URL substring (mirrors finnhub.test.ts).
@@ -26,12 +28,15 @@ function mockFetch(routes: Record<string, Route | Route[]>) {
     if (!fragment) throw new Error(`unexpected fetch: ${href}`);
     const queue = queues[fragment];
     const route = queue.length > 1 ? queue.shift()! : queue[0];
-    const { ok = true, status = ok ? 200 : 500, body, headers = {} } = route;
+    const { ok = true, status = ok ? 200 : 500, body, headers = {}, jsonThrows = false } = route;
     return {
       ok,
       status,
       headers: { get: (h: string) => headers[h.toLowerCase()] ?? null },
-      json: async () => body,
+      json: async () => {
+        if (jsonThrows) throw new SyntaxError('Unexpected end of JSON input');
+        return body;
+      },
     } as unknown as Response;
   }) as never);
 }
@@ -243,5 +248,88 @@ describe('Trading212Provider.fetchDividends', () => {
       amountEur: 0.66,
       occurredAt: '2025-03-15T00:00:00.000Z',
     });
+  });
+});
+
+describe('Trading212Provider 429 handling', () => {
+  const ordersPage = {
+    items: [
+      {
+        order: { id: 1, side: 'BUY', ticker: 'AAPL_US_EQ', instrument: { ticker: 'AAPL_US_EQ', name: 'Apple', isin: 'US0378331005', currency: 'USD' } },
+        fill: { quantity: 1, price: 100, filledAt: '2025-01-01T00:00:00.000Z', walletImpact: { fxRate: 1 } },
+      },
+    ],
+    nextPagePath: null,
+  };
+
+  it('retries once after a 429 then returns parsed data on the 200', async () => {
+    const spy = mockFetch({
+      '/equity/history/orders': [
+        { ok: false, status: 429, headers: { 'retry-after': '5' } },
+        { body: ordersPage },
+      ],
+    });
+    const p = new Trading212Provider(noopSleep);
+    const { items } = await p.fetchOrders(CREDS);
+
+    // The retry actually happened: two fetches to the same endpoint.
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(items[0].externalId).toBe('1');
+  });
+
+  it('throws Trading212ApiError when a history fetch stays 429 after the retry', async () => {
+    mockFetch({
+      '/equity/history/orders': [
+        { ok: false, status: 429, headers: { 'retry-after': '5' } },
+        { ok: false, status: 429, headers: { 'retry-after': '5' } },
+      ],
+    });
+    const p = new Trading212Provider(noopSleep);
+    // Must throw — NOT silently return an empty page (which would truncate the ledger).
+    await expect(p.fetchOrders(CREDS)).rejects.toBeInstanceOf(Trading212ApiError);
+    await expect(p.fetchOrders(CREDS)).rejects.toMatchObject({ status: 429 });
+  });
+
+  it('follows an ABSOLUTE-URL nextPagePath cursor', async () => {
+    const page1 = {
+      items: [
+        {
+          order: { id: 1, side: 'BUY', ticker: 'AAPL_US_EQ', instrument: { ticker: 'AAPL_US_EQ', name: 'Apple', isin: 'US0378331005', currency: 'USD' } },
+          fill: { quantity: 1, price: 100, filledAt: '2025-01-01T00:00:00.000Z', walletImpact: { fxRate: 1 } },
+        },
+      ],
+      nextPagePath: 'https://live.trading212.com/api/v0/equity/history/orders?limit=50&cursor=xyz',
+    };
+    const page2 = {
+      items: [
+        {
+          order: { id: 2, side: 'SELL', ticker: 'AAPL_US_EQ', instrument: { ticker: 'AAPL_US_EQ', name: 'Apple', isin: 'US0378331005', currency: 'USD' } },
+          fill: { quantity: 1, price: 110, filledAt: '2025-02-01T00:00:00.000Z', walletImpact: { fxRate: 1 } },
+        },
+      ],
+      nextPagePath: null,
+    };
+    const spy = mockFetch({ '/equity/history/orders': [{ body: page1 }, { body: page2 }] });
+
+    const p = new Trading212Provider(noopSleep);
+    const first = await p.fetchOrders(CREDS);
+    const absoluteCursor = first.nextCursor!;
+    expect(absoluteCursor.startsWith('http')).toBe(true);
+
+    const second = await p.fetchOrders(CREDS, absoluteCursor);
+    expect(second.items[0].externalId).toBe('2');
+    expect(second.nextCursor).toBeUndefined();
+    // The absolute cursor was fetched verbatim (no BASE_URL re-prefixing).
+    expect(spy.mock.calls[1][0]).toBe(absoluteCursor);
+  });
+});
+
+describe('Trading212Provider malformed body handling', () => {
+  it('fetchPositions surfaces a malformed 200 body as Trading212ApiError, not a raw SyntaxError', async () => {
+    mockFetch({ '/equity/portfolio': { ok: true, status: 200, jsonThrows: true } });
+    const p = new Trading212Provider(noopSleep);
+    // A malformed 200 is treated as non-ok by fetchJson → fetchPositions throws
+    // Trading212ApiError rather than letting the raw JSON SyntaxError escape.
+    await expect(p.fetchPositions(CREDS)).rejects.toBeInstanceOf(Trading212ApiError);
   });
 });

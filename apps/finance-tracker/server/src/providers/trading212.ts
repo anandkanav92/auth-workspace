@@ -20,6 +20,24 @@ const BASE_URL = 'https://live.trading212.com';
 /** ~10s between paged history calls keeps us under the 6/60s history limit. */
 const HISTORY_PAGE_DELAY_MS = 10_000;
 
+/** Page size for the orders/dividends history endpoints (`limit=` query param). */
+const HISTORY_PAGE_SIZE = 50;
+
+/**
+ * Thrown when a Trading 212 request stays non-ok after the single 429-aware
+ * retry. History fetches throw this (instead of returning an empty page) so a
+ * multi-page backfill fails loudly rather than silently truncating the ledger.
+ */
+export class Trading212ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'Trading212ApiError';
+  }
+}
+
 /** A single open portfolio position. ISIN/currency are NOT in this endpoint —
  *  the sync resolves them from the order-derived ticker map. */
 export interface T212Position {
@@ -144,15 +162,25 @@ export class Trading212Provider implements BrokerProvider {
       await this.sleep(this.retryDelayMs(res));
       res = await fetch(url, { headers: { Authorization: this.authHeader(creds) } });
     }
-    const body = res.ok ? await res.json() : undefined;
-    return { ok: res.ok, status: res.status, body };
+    if (!res.ok) return { ok: false, status: res.status, body: undefined };
+    // A 200 with a malformed/truncated body must NOT throw an uncaught error.
+    // Treat a parse failure as a non-ok response so callers handle it uniformly.
+    try {
+      const body = await res.json();
+      return { ok: true, status: res.status, body };
+    } catch {
+      return { ok: false, status: res.status, body: undefined };
+    }
   }
 
   /** Milliseconds to wait after a 429, from rate-limit headers (fallback 60s). */
   private retryDelayMs(res: Response): number {
     const reset = res.headers.get('x-ratelimit-reset');
     if (reset) {
-      // `x-ratelimit-reset` is epoch seconds; clamp to a non-negative wait.
+      // ASSUMPTION: `x-ratelimit-reset` is epoch SECONDS (absolute time), so we
+      // subtract `Date.now()` to get the wait. We have not yet observed a live
+      // 429 to confirm this — if it turns out to be a seconds-delta like
+      // `retry-after`, this needs revisiting. Clamp to a non-negative wait.
       const waitMs = Number(reset) * 1000 - Date.now();
       return Math.max(0, waitMs);
     }
@@ -175,8 +203,10 @@ export class Trading212Provider implements BrokerProvider {
   }
 
   async fetchPositions(creds: string): Promise<T212Position[]> {
-    const { ok, body } = await this.fetchJson(`${BASE_URL}/api/v0/equity/portfolio`, creds);
-    if (!ok) return [];
+    const { ok, status, body } = await this.fetchJson(`${BASE_URL}/api/v0/equity/portfolio`, creds);
+    // Single call (no truncation risk), but a thrown error beats silently
+    // returning [] — the sync can then set status=error and preserve data.
+    if (!ok) throw new Trading212ApiError(`portfolio fetch failed (status ${status})`, status);
     const positions = body as RawPosition[];
     return positions.map((p) => ({
       t212Ticker: p.ticker,
@@ -190,9 +220,11 @@ export class Trading212Provider implements BrokerProvider {
   async fetchOrders(creds: string, cursor?: string): Promise<LedgerPage> {
     const url = cursor
       ? this.resolveCursor(cursor)
-      : `${BASE_URL}/api/v0/equity/history/orders?limit=50`;
-    const { ok, body } = await this.fetchJson(url, creds);
-    if (!ok) return { items: [] };
+      : `${BASE_URL}/api/v0/equity/history/orders?limit=${HISTORY_PAGE_SIZE}`;
+    const { ok, status, body } = await this.fetchJson(url, creds);
+    // Throw (don't return an empty page) so a persistent 429/error stops the
+    // backfill loop. An empty page must ONLY come from a genuine `items: []`.
+    if (!ok) throw new Trading212ApiError(`orders fetch failed (status ${status})`, status);
     const page = body as RawOrdersPage;
     const items = page.items.map((it) => this.mapOrder(it));
     return { items, nextCursor: page.nextPagePath ?? undefined };
@@ -221,9 +253,11 @@ export class Trading212Provider implements BrokerProvider {
   async fetchDividends(creds: string, cursor?: string): Promise<LedgerPage> {
     const url = cursor
       ? this.resolveCursor(cursor)
-      : `${BASE_URL}/api/v0/history/dividends?limit=50`;
-    const { ok, body } = await this.fetchJson(url, creds);
-    if (!ok) return { items: [] };
+      : `${BASE_URL}/api/v0/history/dividends?limit=${HISTORY_PAGE_SIZE}`;
+    const { ok, status, body } = await this.fetchJson(url, creds);
+    // Throw (don't return an empty page) so a persistent 429/error stops the
+    // backfill loop. An empty page must ONLY come from a genuine `items: []`.
+    if (!ok) throw new Trading212ApiError(`dividends fetch failed (status ${status})`, status);
     const page = body as RawDividendsPage;
     const items = page.items.map((d) => ({
       externalId: d.reference,
