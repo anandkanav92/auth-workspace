@@ -265,18 +265,24 @@ export class Trading212Provider implements BrokerProvider {
     // backfill loop. An empty page must ONLY come from a genuine `items: []`.
     if (!ok) throw new Trading212ApiError(`dividends fetch failed (status ${status})`, status);
     const page = body as RawDividendsPage;
-    const items = page.items.map((d) => ({
-      externalId: d.reference,
-      type: 'dividend' as const,
-      t212Ticker: d.ticker,
-      isin: d.instrument.isin,
-      name: d.instrument.name,
-      currency: normalizeCurrencyCode(d.instrument.currency),
-      rawCurrency: d.instrument.currency,
-      amount: d.amount,
-      amountEur: d.amountInEuro,
-      occurredAt: d.paidOn,
-    }));
+    const items = page.items.map((d) => {
+      const ccy = d.instrument.currency;
+      return {
+        externalId: d.reference,
+        type: 'dividend' as const,
+        t212Ticker: d.ticker,
+        isin: d.instrument.isin,
+        name: d.instrument.name,
+        currency: normalizeCurrencyCode(ccy),
+        rawCurrency: ccy,
+        // GBX/GBp dividends are paid in pence — normalise the cash amount to GBP
+        // major units, mirroring how mapOrder normalises fill.price. amountEur
+        // (amountInEuro) is already a major-unit EUR figure, so leave it as-is.
+        amount: normalizePence(d.amount, ccy).amount,
+        amountEur: d.amountInEuro,
+        occurredAt: d.paidOn,
+      };
+    });
     return { items, nextCursor: page.nextPagePath ?? undefined };
   }
 

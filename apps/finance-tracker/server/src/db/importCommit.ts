@@ -79,6 +79,14 @@ export async function commitHoldingsReplace(args: {
   existing: Deletable[];
   holdings: HoldingCreate[];
 }): Promise<void> {
+  // Nothing to delete AND nothing to create → no-op. An empty batch would be a
+  // wasted (and invalid) round-trip to PocketBase, so skip it entirely. This is
+  // the common zero-positions, zero-existing path (e.g. a brand-new connection
+  // whose account holds nothing yet).
+  if (args.existing.length === 0 && args.holdings.length === 0) {
+    return;
+  }
+
   const pb = await pbAdmin();
   const batch = pb.createBatch();
 

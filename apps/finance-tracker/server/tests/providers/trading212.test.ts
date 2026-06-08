@@ -252,6 +252,47 @@ describe('Trading212Provider.fetchDividends', () => {
       occurredAt: '2025-03-15T00:00:00.000Z',
     });
   });
+
+  it('normalises a GBX dividend amount ÷100 → GBP (symmetry with orders)', async () => {
+    mockFetch({
+      '/history/dividends': {
+        body: {
+          items: [
+            {
+              // LSE listing pays its dividend in pence (GBX) — amount must be ÷100,
+              // currency → GBP. amountInEuro is already a major-unit EUR figure.
+              ticker: 'VODl_EQ',
+              instrument: { ticker: 'VODl_EQ', name: 'Vodafone Group', isin: 'GB00BH4HKS39', currency: 'GBX' },
+              reference: 'DIV-9090',
+              quantity: 100,
+              amount: 825, // 825 pence => 8.25 GBP
+              currency: 'GBX',
+              grossAmountPerShare: 8.25,
+              amountInEuro: 9.7,
+              paidOn: '2025-05-20T00:00:00.000Z',
+              type: 'DIVIDEND',
+            },
+          ],
+          nextPagePath: null,
+        },
+      },
+    });
+    const p = new Trading212Provider(noopSleep);
+    const { items } = await p.fetchDividends(CREDS);
+
+    expect(items[0]).toEqual({
+      externalId: 'DIV-9090',
+      type: 'dividend',
+      t212Ticker: 'VODl_EQ',
+      isin: 'GB00BH4HKS39',
+      name: 'Vodafone Group',
+      currency: 'GBP', // GBX normalised
+      rawCurrency: 'GBX', // raw instrument currency preserved
+      amount: 8.25, // 825 / 100
+      amountEur: 9.7, // amountInEuro left as-is
+      occurredAt: '2025-05-20T00:00:00.000Z',
+    });
+  });
 });
 
 describe('Trading212Provider 429 handling', () => {

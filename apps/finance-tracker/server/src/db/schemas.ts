@@ -92,6 +92,17 @@ export const holdingUpdateSchema = holdingCreateSchema.partial();
 
 // --- transactions -----------------------------------------------------------
 // Append-only audit log. `holding` is nullable (orphan dividends/fees).
+//
+// `price` OVERLOAD (schema decision — there is no dedicated cash-amount column):
+//   - buy / sell rows: `price` is the PER-SHARE price (so quantity × price is the
+//     gross trade value).
+//   - dividend rows: `price` holds the TOTAL cash amount paid (already pence-
+//     normalised to the row's `currency`), NOT a per-share figure — quantity ×
+//     price is therefore meaningless for dividends.
+// The FX-correct EUR figure for dividends (the provider's `amountEur`) is NOT
+// persisted yet — there is no field for it. TODO(M6.2): add a dedicated dividend
+// amount/EUR column and backfill via the idempotent re-sync, when real dividend
+// income is computed from the ledger.
 export const transactionSchema = z.object({
   ...baseRecord,
   user: z.string(),
