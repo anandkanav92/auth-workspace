@@ -44,10 +44,18 @@ export interface BrokerDeps {
   /** AES-encrypt the raw API key (prod: encryptSecret + T212_KEY_ENC_SECRET). */
   encrypt: (plain: string) => string;
   /**
-   * Fire-and-forget hook run after a successful connect (initial sync lands in a
-   * later task). Defaults to a no-op so connect never depends on sync existing.
+   * Fire-and-forget hook run after a successful connect. In prod this triggers
+   * the initial Trading 212 sync (Task 2.4). Defaults to a no-op so connect never
+   * depends on sync existing.
    */
   onConnected?: (pbUserId: string) => void;
+  /**
+   * Run a Trading 212 sync for this user (Task 2.4 "Sync now"). Returns the sync
+   * result. In prod this is bound to runTrading212Sync. The handler 404s before
+   * calling this when the user has no connection, so a sync only ever runs for a
+   * connected user.
+   */
+  sync?: (pbUserId: string) => Promise<unknown>;
 }
 
 const connectSchema = z.object({
@@ -173,6 +181,33 @@ export async function disconnectTrading212With(
   return { ok: true };
 }
 
+/**
+ * Trigger a sync for this user's Trading 212 connection ("Sync now", Task 2.4).
+ *
+ * Guards on the connection FIRST: a user with no connection gets a 404 (and the
+ * sync never runs), so this can never sync against a missing/other user's
+ * connection. Returns the sync result (counts) on success; the sync itself
+ * stamps status=error + last_error on failure and rethrows, which the route's
+ * error handler surfaces as a 500 without wiping data.
+ */
+export async function syncTrading212With(
+  pbUserId: string,
+  deps: BrokerDeps,
+): Promise<unknown> {
+  const conn = await deps.connections.getForUser(pbUserId, BROKER);
+  if (!conn) {
+    throw new HTTPException(404, {
+      res: Response.json({ error: 'not_connected' }, { status: 404 }),
+    });
+  }
+  if (!deps.sync) {
+    throw new HTTPException(400, {
+      res: Response.json({ error: 'sync_unavailable' }, { status: 400 }),
+    });
+  }
+  return deps.sync(pbUserId);
+}
+
 // --- router factory ---------------------------------------------------------
 // One router built from a deps RESOLVER so the prod router can resolve its deps
 // lazily per request while tests pass a fixed deps object. Both paths run the
@@ -215,6 +250,13 @@ function buildRouter(resolveDeps: () => BrokerDeps | Promise<BrokerDeps>) {
         await resolveDeps(),
       );
       return c.json(result);
+    })
+    .post('/trading212/sync', async (c) => {
+      const result = await syncTrading212With(
+        c.var.pbUserId,
+        await resolveDeps(),
+      );
+      return c.json({ ok: true, result });
     });
 }
 
@@ -233,6 +275,7 @@ async function getProdDeps(): Promise<BrokerDeps> {
     const { accountsRepo } = await import('../db/accounts');
     const { Trading212Provider } = await import('../providers/broker');
     const { encryptSecret } = await import('../lib/crypto');
+    const { runTrading212Sync } = await import('../sync/trading212Sync');
     prodDeps = {
       connections: brokerConnectionsRepo,
       accounts: accountsRepo,
@@ -244,7 +287,19 @@ async function getProdDeps(): Promise<BrokerDeps> {
         }
         return encryptSecret(plain, secret);
       },
-      // onConnected (initial sync) wired in a later task — no-op for now.
+      sync: runTrading212Sync,
+      // Initial sync on connect: fire-and-forget. A backfill of a long history
+      // can take minutes (history is rate-limited to 6/min), so connect must NOT
+      // await it. Any failure is swallowed + logged here — the sync itself has
+      // already stamped status=error on the connection, so the UI surfaces it.
+      onConnected: (pbUserId: string) => {
+        void runTrading212Sync(pbUserId).catch((err) => {
+          console.error(
+            `[broker] initial Trading 212 sync failed for ${pbUserId}:`,
+            err instanceof Error ? err.message : err,
+          );
+        });
+      },
     };
   }
   return prodDeps;

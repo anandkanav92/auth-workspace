@@ -10,6 +10,7 @@ import {
   useBrokerStatus,
   useConnectBroker,
   useDisconnectBroker,
+  useSyncNow,
 } from "@/lib/broker";
 import { formatDate } from "@/lib/format";
 
@@ -201,11 +202,20 @@ function ConnectedState({
   lastSyncedAt?: string;
 }) {
   const disconnect = useDisconnectBroker();
+  const syncNow = useSyncNow();
 
   function handleDisconnect() {
     disconnect.mutate(undefined, {
       onSuccess: () => toast.success("Trading 212 disconnected."),
       onError: () => toast.error("Couldn't disconnect. Please try again."),
+    });
+  }
+
+  function handleSyncNow() {
+    syncNow.mutate(undefined, {
+      onSuccess: () => toast.success("Trading 212 synced."),
+      onError: () =>
+        toast.error("Sync failed — check your connection and try again."),
     });
   }
 
@@ -239,17 +249,26 @@ function ConnectedState({
         </div>
       </dl>
 
-      {/* TODO(M2.4): Sync now button — wired once the sync endpoint lands. */}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSyncNow}
+          disabled={syncNow.isPending}
+        >
+          {syncNow.isPending ? "Syncing…" : "Sync now"}
+        </Button>
 
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={handleDisconnect}
-        disabled={disconnect.isPending}
-      >
-        {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
-      </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={handleDisconnect}
+          disabled={disconnect.isPending}
+        >
+          {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   connectTrading212With,
   getTrading212StatusWith,
   disconnectTrading212With,
+  syncTrading212With,
   makeBrokerRoutes,
 } from '../../src/routes/broker';
 import type { BrokerConnection, Account } from '../../src/db/schemas';
@@ -80,6 +81,7 @@ function makeFakes() {
 function depsFrom(
   fakes: ReturnType<typeof makeFakes>,
   provider: BrokerDeps['provider'],
+  extra?: Partial<Pick<BrokerDeps, 'sync' | 'onConnected'>>,
 ): BrokerDeps {
   return {
     connections: fakes.connectionsRepo,
@@ -88,6 +90,7 @@ function depsFrom(
     // Re-implements the prod wiring (encryptSecret + env key) so the unit test
     // exercises real encryption rather than a stub.
     encrypt: (plain: string) => encryptSecret(plain, HEX_KEY),
+    ...extra,
   };
 }
 
@@ -297,6 +300,37 @@ describe('disconnectTrading212With', () => {
   });
 });
 
+// --- sync-now handler -------------------------------------------------------
+
+describe('syncTrading212With', () => {
+  it('runs the sync for a connected user and returns its result', async () => {
+    const fakes = makeFakes();
+    await fakes.connectionsRepo.create({
+      user: 'u1',
+      broker: 'trading212',
+      api_key_enc: 'x',
+      status: 'connected',
+    } as Partial<BrokerConnection>);
+    const sync = vi.fn(async () => ({ positions: 2, orders: 3, dividends: 1 }));
+    const deps = depsFrom(fakes, okProvider(), { sync });
+
+    const result = await syncTrading212With('u1', deps);
+    expect(sync).toHaveBeenCalledWith('u1');
+    expect(result).toEqual({ positions: 2, orders: 3, dividends: 1 });
+  });
+
+  it('404s (and never runs the sync) when the user has no connection', async () => {
+    const fakes = makeFakes();
+    const sync = vi.fn(async () => ({ positions: 0, orders: 0, dividends: 0 }));
+    const deps = depsFrom(fakes, okProvider(), { sync });
+
+    await expect(syncTrading212With('u1', deps)).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(sync).not.toHaveBeenCalled();
+  });
+});
+
 // --- HTTP wiring + per-user isolation ---------------------------------------
 // Drive the mounted router over HTTP with a shimmed auth middleware (mirrors the
 // other route tests) to confirm c.var.pbUserId scoping and the JSON contract.
@@ -396,5 +430,34 @@ describe('broker routes over HTTP (user-scoped)', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(fakes.peek.connections()).toHaveLength(0);
+  });
+
+  it('POST /trading212/sync runs the sync for a connected user', async () => {
+    const sync = vi.fn(async () => ({ positions: 1, orders: 0, dividends: 0 }));
+    const syncDeps = depsFrom(fakes, okProvider(), { sync });
+    await connectTrading212With('u1', { apiKey: 'k', apiSecret: 's' }, syncDeps);
+    const app = appAs(syncDeps, 'u1');
+
+    const res = await app.request('/api/broker/trading212/sync', {
+      method: 'POST',
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      ok: true,
+      result: { positions: 1, orders: 0, dividends: 0 },
+    });
+    expect(sync).toHaveBeenCalledWith('u1');
+  });
+
+  it('POST /trading212/sync is a 404 when the user has no connection', async () => {
+    const sync = vi.fn();
+    const syncDeps = depsFrom(fakes, okProvider(), { sync });
+    const app = appAs(syncDeps, 'u1');
+
+    const res = await app.request('/api/broker/trading212/sync', {
+      method: 'POST',
+    });
+    expect(res.status).toBe(404);
+    expect(sync).not.toHaveBeenCalled();
   });
 });

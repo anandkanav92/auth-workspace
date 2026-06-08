@@ -171,6 +171,65 @@ describe("SettingsPage — Connect Trading 212", () => {
     });
   });
 
+  it("connected: Sync now POSTs the sync endpoint, invalidates caches and toasts", async () => {
+    const user = userEvent.setup();
+    apiGet.mockResolvedValue({
+      connected: true,
+      status: "connected",
+      last_synced_at: "2026-06-07T10:00:00.000Z",
+    });
+    apiPost.mockResolvedValue({
+      ok: true,
+      result: { positions: 2, orders: 3, dividends: 1 },
+    });
+
+    const { invalidateSpy } = renderSettings();
+
+    const syncButton = await screen.findByRole("button", {
+      name: /^Sync now$/,
+    });
+    await user.click(syncButton);
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/broker/trading212/sync",
+        undefined,
+      );
+    });
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["holdings"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["transactions"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["accounts"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["broker-status"],
+      });
+    });
+    expect(toastSuccess).toHaveBeenCalled();
+  });
+
+  it("connected: a failed Sync now surfaces an error toast", async () => {
+    const user = userEvent.setup();
+    apiGet.mockResolvedValue({
+      connected: true,
+      status: "connected",
+      last_synced_at: "2026-06-07T10:00:00.000Z",
+    });
+    apiPost.mockRejectedValue(new ApiError(500, "sync_failed", {}));
+
+    renderSettings();
+
+    await user.click(
+      await screen.findByRole("button", { name: /^Sync now$/ }),
+    );
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith(
+        expect.stringMatching(/sync failed/i),
+      );
+    });
+  });
+
   it("connected with status:error: shows the amber reconnect banner", async () => {
     apiGet.mockResolvedValue({
       connected: true,

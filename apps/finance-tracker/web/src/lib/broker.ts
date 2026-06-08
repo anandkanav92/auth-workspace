@@ -72,5 +72,24 @@ export function useDisconnectBroker() {
   });
 }
 
-// TODO(M2.4): Sync now — useSyncNow() mutation (POST /api/broker/trading212/sync)
-// arrives once the sync endpoint lands in Task 2.4.
+/**
+ * Trigger a Trading 212 sync ("Sync now", Task 2.4). On success the holdings,
+ * ledger, accounts and connection status all change server-side, so we
+ * invalidate every cache that reflects synced data. The mutation resolves once
+ * the sync completes (the server runs it synchronously for the manual button).
+ */
+export function useSyncNow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ ok: true; result: unknown }>(
+        "/api/broker/trading212/sync",
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["holdings"] });
+      void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      void queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      void queryClient.invalidateQueries({ queryKey: BROKER_STATUS_KEY });
+    },
+  });
+}
