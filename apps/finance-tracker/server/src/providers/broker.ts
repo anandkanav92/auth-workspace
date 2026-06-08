@@ -2,9 +2,11 @@
 // interface rather than a concrete client so the connect/status/disconnect
 // handlers are unit-testable without hitting the real Trading 212 API.
 //
-// `validateKey` is the only method needed in Milestone 1 (connect flow). The
-// fetch* methods used by the sync service land in Task 2.1, so the concrete
-// Trading212Provider here is a placeholder whose validateKey throws until then.
+// `validateKey` powers the connect flow; the `fetch*` methods power the sync
+// service (Task 2.1). All methods take the COMBINED credentials string
+// ("<public>:<private>") — see trading212.ts for the concrete implementation.
+
+import type { LedgerEvent, LedgerPage, T212Position } from './trading212';
 
 export interface BrokerProvider {
   /**
@@ -14,21 +16,21 @@ export interface BrokerProvider {
    * stores nothing).
    */
   validateKey(
-    apiKey: string,
+    creds: string,
   ): Promise<{ ok: boolean; accountId?: string; currency?: string }>;
+
+  /** Open portfolio positions. ISIN/currency are resolved by the sync from the
+   *  order-derived ticker map (not present on this endpoint). */
+  fetchPositions(creds: string): Promise<T212Position[]>;
+
+  /** A page of buy/sell ledger events. `cursor` is the prior page's nextCursor. */
+  fetchOrders(creds: string, cursor?: string): Promise<LedgerPage>;
+
+  /** A page of dividend ledger events. `cursor` is the prior page's nextCursor. */
+  fetchDividends(creds: string, cursor?: string): Promise<LedgerPage>;
 }
 
-/**
- * Real Trading 212 provider — implemented in Task 2.1. Until then `validateKey`
- * is a TODO placeholder that throws if ever reached in production, making the
- * "not yet wired" state loud rather than silently returning a bad result. In
- * tests the routes inject a mock BrokerProvider, so this stub is never called.
- */
-export class Trading212Provider implements BrokerProvider {
-  async validateKey(
-    _apiKey: string,
-  ): Promise<{ ok: boolean; accountId?: string; currency?: string }> {
-    // TODO(Task 2.1): call the Trading 212 account endpoint and map the result.
-    throw new Error('Trading212Provider.validateKey not implemented');
-  }
-}
+// The real provider lives in trading212.ts; re-export it here so existing
+// imports (`../providers/broker` in routes/broker.ts) bind to the real impl.
+export { Trading212Provider } from './trading212';
+export type { LedgerEvent, LedgerPage, T212Position } from './trading212';
