@@ -11,4 +11,12 @@ describe('crypto', () => {
     const ct = encryptSecret('x', KEY);
     expect(() => decryptSecret(ct.slice(0, -2) + '00', KEY)).toThrow();
   });
+  it('throws on a wrong-length hex key (31 bytes)', () => {
+    const shortKey = 'a'.repeat(62); // 31 bytes — not 32
+    expect(() => encryptSecret('x', shortKey)).toThrow();
+  });
+  it('throws on non-hex key input', () => {
+    const nonHex = 'z'.repeat(64); // valid length string, but not hex
+    expect(() => encryptSecret('x', nonHex)).toThrow();
+  });
 });

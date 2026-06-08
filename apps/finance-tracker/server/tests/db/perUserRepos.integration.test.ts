@@ -13,7 +13,7 @@
 // The repos go through src/lib/pb.ts's pbAdmin(); globalSetup points
 // PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD at the seeded superuser.
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import PocketBase from 'pocketbase';
 import { USER_A, USER_B } from '../pb-test-server';
 import { accountsRepo } from '../../src/db/accounts';
@@ -21,6 +21,8 @@ import { holdingsRepo } from '../../src/db/holdings';
 import { transactionsRepo } from '../../src/db/transactions';
 import { importsRepo } from '../../src/db/imports';
 import { holdingsSnapshotRepo } from '../../src/db/holdingsSnapshot';
+import { brokerConnectionsRepo } from '../../src/db/brokerConnections';
+import { encryptSecret, decryptSecret } from '../../src/lib/crypto';
 
 const PB_URL = process.env.PB_URL!;
 
@@ -258,5 +260,86 @@ describe('HoldingsSnapshotRepo', () => {
     const aSees = await holdingsSnapshotRepo.list(userAId);
     expect(aSees.every((s) => s.user === userAId)).toBe(true);
     expect(aSees.find((s) => s.ticker === 'BSNAP')).toBeUndefined();
+  });
+});
+
+describe('BrokerConnectionsRepo', () => {
+  // 32-byte key as a 64-hex string, mirroring tests/lib/crypto.test.ts.
+  const KEY = 'b'.repeat(64);
+
+  // The integration PocketBase is shared/persistent across test files, and the
+  // (user, broker) unique index means a leftover 'trading212' row (e.g. from
+  // the pb-rules suite) would both break isolation assertions and collide on
+  // create. Start each test from a clean slate for both users.
+  beforeEach(async () => {
+    for (const uid of [userAId, userBId]) {
+      const existing = await brokerConnectionsRepo.list(uid);
+      for (const row of existing) {
+        await brokerConnectionsRepo.delete((row as { id: string }).id);
+      }
+    }
+  });
+
+  it('CRUD roundtrip', async () => {
+    const created = await brokerConnectionsRepo.create({
+      user: userAId,
+      broker: 'trading212',
+      api_key_enc: 'iv.tag.ct',
+    });
+    expect(created.id).toBeTruthy();
+
+    const listed = await brokerConnectionsRepo.list(userAId);
+    expect(listed.find((c) => c.id === created.id)).toBeTruthy();
+
+    const got = await brokerConnectionsRepo.get(created.id);
+    expect(got.broker).toBe('trading212');
+
+    const updated = await brokerConnectionsRepo.update(created.id, {
+      status: 'error',
+    });
+    expect(updated.status).toBe('error');
+
+    const ok = await brokerConnectionsRepo.delete(created.id);
+    expect(ok).toBe(true);
+  });
+
+  it('getForUser is user-scoped: userB cannot read userA connection', async () => {
+    const created = await brokerConnectionsRepo.create({
+      user: userAId,
+      broker: 'trading212',
+      api_key_enc: 'iv.tag.ct',
+    });
+
+    // User A reads its own connection back...
+    const aSees = await brokerConnectionsRepo.getForUser(userAId, 'trading212');
+    expect(aSees?.id).toBe(created.id);
+
+    // ...but the same broker scoped to user B must not surface A's row.
+    const bSees = await brokerConnectionsRepo.getForUser(userBId, 'trading212');
+    expect(bSees).toBeNull();
+
+    await brokerConnectionsRepo.delete(created.id);
+  });
+
+  it('persists an encrypted key and decrypts it on read back', async () => {
+    const cipher = encryptSecret('secret-key', KEY);
+    // The stored value must not leak the plaintext.
+    expect(cipher).not.toContain('secret-key');
+
+    const created = await brokerConnectionsRepo.create({
+      user: userAId,
+      broker: 'trading212',
+      api_key_enc: cipher,
+    });
+
+    const fetched = await brokerConnectionsRepo.getForUser(
+      userAId,
+      'trading212',
+    );
+    expect(fetched).not.toBeNull();
+    expect(fetched!.api_key_enc).toBe(cipher);
+    expect(decryptSecret(fetched!.api_key_enc, KEY)).toBe('secret-key');
+
+    await brokerConnectionsRepo.delete(created.id);
   });
 });

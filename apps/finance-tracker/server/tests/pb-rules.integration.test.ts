@@ -30,6 +30,7 @@ const PER_USER_COLLECTIONS = [
   'transactions',
   'imports',
   'holdings_snapshot',
+  'broker_connections',
 ] as const;
 
 describe('PocketBase per-user isolation (Spike 5)', () => {
@@ -108,6 +109,14 @@ describe('PocketBase per-user isolation (Spike 5)', () => {
           eur_value: 1,
           date: nowIso,
         };
+      case 'broker_connections':
+        // Owned directly by user (no `account` relation). The marker rides in
+        // api_key_enc, which mimics our base64(iv).base64(tag).base64(ct) shape.
+        return {
+          user: userId,
+          broker: 'trading212',
+          api_key_enc: `${label}.y.z`,
+        };
     }
   }
 
@@ -133,10 +142,15 @@ describe('PocketBase per-user isolation (Spike 5)', () => {
 
       const aSees = await pbA.collection(coll).getFullList();
 
-      // No row should carry the B-owned marker...
-      const markerFields = aSees.flatMap((r) => [r.label, r.ticker, r.filename]);
+      // No row should carry the B-owned marker. accounts uses `label`, most
+      // children carry it in `ticker`/`filename`, and broker_connections
+      // embeds it in `api_key_enc`, so scan every string field as a substring.
+      const markerHaystack = aSees
+        .flatMap((r) => Object.values(r))
+        .filter((v): v is string => typeof v === 'string')
+        .join(' ');
       expect(
-        markerFields,
+        markerHaystack,
         `A leaked B's ${coll} row (marker visible)`,
       ).not.toContain(marker);
 
