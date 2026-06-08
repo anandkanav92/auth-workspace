@@ -125,15 +125,17 @@ export function Allocation({ accountIds }: TileProps) {
       ) : slices.length === 0 ? (
         <TileEmpty message="No positions to allocate yet." />
       ) : (
-        <div>
-          <LazyChart
-            option={option}
-            style={{ height: 150 }}
-            ariaLabel={`Allocation by ${dimension}`}
-          />
-          {/* Two-column legend keeps the tile compact (and the same height as its
-              row-mates) instead of a tall single column that overflowed. */}
-          <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
+        <div className="sm:flex sm:items-center sm:gap-6">
+          {/* Full-width tile: donut on the left, legend filling the rest on the
+              right (sm+); stacks on mobile. */}
+          <div className="sm:w-1/3 sm:max-w-[260px] sm:shrink-0">
+            <LazyChart
+              option={option}
+              style={{ height: 180 }}
+              ariaLabel={`Allocation by ${dimension}`}
+            />
+          </div>
+          <ul className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 sm:mt-0 sm:flex-1 lg:grid-cols-3">
             {legend.map((s, i) => {
               const isOther = i === 5 && slices.length > 6;
               return (

@@ -31,7 +31,7 @@ export interface TileDef {
 }
 
 export const PHASE_1_TILES: TileDef[] = [
-  { id: "allocation", title: "Allocation", component: Allocation },
+  { id: "allocation", title: "Allocation", component: Allocation, fullWidth: true },
   { id: "concentration", title: "Top 5", component: Concentration },
   {
     id: "diversification",
