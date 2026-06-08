@@ -354,6 +354,83 @@ describe('syncTrading212With (fire-and-forget)', () => {
     });
     expect(sync).not.toHaveBeenCalled();
   });
+
+  it('409s (already_syncing, never starts a second sync) when status=syncing & recent', async () => {
+    const fakes = makeFakes();
+    const NOW = Date.parse('2026-06-08T12:10:00.000Z');
+    // Updated 5 min ago — well within the 15-min lock TTL.
+    await fakes.connectionsRepo.create({
+      user: 'u1',
+      broker: 'trading212',
+      api_key_enc: 'x',
+      status: 'syncing',
+      updated: '2026-06-08T12:05:00.000Z',
+    } as Partial<BrokerConnection>);
+    const sync = vi.fn(async () => ({ positions: 0, orders: 0, dividends: 0 }));
+    const deps = depsFrom(fakes, okProvider(), { sync });
+    deps.now = () => NOW;
+
+    await expect(syncTrading212With('u1', deps)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(sync).not.toHaveBeenCalled();
+  });
+
+  it('starts a sync when status=syncing but STALE (lock TTL elapsed → presumed dead)', async () => {
+    const fakes = makeFakes();
+    const NOW = Date.parse('2026-06-08T12:30:00.000Z');
+    // Updated 25 min ago — past the 15-min lock TTL, so not a live lock.
+    await fakes.connectionsRepo.create({
+      user: 'u1',
+      broker: 'trading212',
+      api_key_enc: 'x',
+      status: 'syncing',
+      updated: '2026-06-08T12:05:00.000Z',
+    } as Partial<BrokerConnection>);
+    const sync = vi.fn(() => new Promise<unknown>(() => {}));
+    const deps = depsFrom(fakes, okProvider(), { sync });
+    deps.now = () => NOW;
+
+    const result = await syncTrading212With('u1', deps);
+    expect(result).toEqual({ ok: true, started: true });
+    expect(sync).toHaveBeenCalledWith('u1');
+  });
+
+  it('starts a sync when status=connected (no lock)', async () => {
+    const fakes = makeFakes();
+    await fakes.connectionsRepo.create({
+      user: 'u1',
+      broker: 'trading212',
+      api_key_enc: 'x',
+      status: 'connected',
+      updated: '2026-06-08T12:05:00.000Z',
+    } as Partial<BrokerConnection>);
+    const sync = vi.fn(() => new Promise<unknown>(() => {}));
+    const deps = depsFrom(fakes, okProvider(), { sync });
+    deps.now = () => Date.parse('2026-06-08T12:06:00.000Z');
+
+    const result = await syncTrading212With('u1', deps);
+    expect(result).toEqual({ ok: true, started: true });
+    expect(sync).toHaveBeenCalledWith('u1');
+  });
+
+  it('starts a sync when status=error (no lock)', async () => {
+    const fakes = makeFakes();
+    await fakes.connectionsRepo.create({
+      user: 'u1',
+      broker: 'trading212',
+      api_key_enc: 'x',
+      status: 'error',
+      last_error: 'ip_blocked',
+      updated: '2026-06-08T12:05:00.000Z',
+    } as Partial<BrokerConnection>);
+    const sync = vi.fn(() => new Promise<unknown>(() => {}));
+    const deps = depsFrom(fakes, okProvider(), { sync });
+
+    const result = await syncTrading212With('u1', deps);
+    expect(result).toEqual({ ok: true, started: true });
+    expect(sync).toHaveBeenCalledWith('u1');
+  });
 });
 
 // --- HTTP wiring + per-user isolation ---------------------------------------
@@ -489,6 +566,27 @@ describe('broker routes over HTTP (user-scoped)', () => {
     // status=error); it must NOT surface as a 5xx on this endpoint.
     expect(res.status).toBe(202);
     expect(await res.json()).toEqual({ ok: true, started: true });
+  });
+
+  it('POST /trading212/sync is a 409 already_syncing when a recent sync is in flight', async () => {
+    const sync = vi.fn(() => new Promise<unknown>(() => {}));
+    const syncDeps = depsFrom(fakes, okProvider(), { sync });
+    syncDeps.now = () => Date.parse('2026-06-08T12:06:00.000Z');
+    await fakes.connectionsRepo.create({
+      user: 'u1',
+      broker: 'trading212',
+      api_key_enc: 'x',
+      status: 'syncing',
+      updated: '2026-06-08T12:05:00.000Z',
+    } as Partial<BrokerConnection>);
+    const app = appAs(syncDeps, 'u1');
+
+    const res = await app.request('/api/broker/trading212/sync', {
+      method: 'POST',
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'already_syncing' });
+    expect(sync).not.toHaveBeenCalled();
   });
 
   it('POST /trading212/sync is a 404 when the user has no connection', async () => {

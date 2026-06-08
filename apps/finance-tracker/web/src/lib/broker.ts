@@ -14,13 +14,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 
 /** Shape returned by GET /api/broker/trading212/status. */
 export interface BrokerStatus {
   connected: boolean;
-  /** Only present once connected; "error" surfaces the reconnect banner. */
-  status?: "connected" | "error";
+  /**
+   * Only present once connected. "syncing" is the server-authoritative
+   * in-progress signal (survives reloads / concurrent clients); "error" surfaces
+   * the reconnect banner. The lifecycle is syncing → connected | error.
+   */
+  status?: "connected" | "error" | "syncing";
   last_synced_at?: string;
   last_error?: string;
 }
@@ -31,7 +35,7 @@ export const BROKER_STATUS_KEY = ["broker-status"] as const;
 /** How often we re-poll the status query while a background sync runs. */
 const SYNC_POLL_INTERVAL_MS = 4_000;
 /** Give up polling after this long; the sync may still finish server-side. */
-const SYNC_POLL_TIMEOUT_MS = 150_000;
+const SYNC_POLL_TIMEOUT_MS = 180_000;
 
 /** Fetch the signed-in user's Trading 212 connection status. */
 export function useBrokerStatus() {
@@ -85,33 +89,43 @@ interface SyncStartedResponse {
 }
 
 /**
- * Drive the "Sync now" button (Task 2.4). The server now runs the sync in the
- * background and returns 202 immediately, recording progress on the connection
- * (`status` / `last_synced_at` / `last_error`). So instead of awaiting a result
- * that never comes, we:
+ * Drive the "Sync now" button (Task 2.4). The server runs the sync in the
+ * background and returns 202 immediately, stamping the connection
+ * `status:'syncing'` at the start and flipping it to `connected` | `error` when
+ * it finishes — a SERVER-AUTHORITATIVE lifecycle. So we:
  *
- *   1. capture the pre-sync `last_synced_at` and kick off the POST,
- *   2. on the 202, flip `isSyncing` on → an internal status observer starts
- *      polling every ~4s (it shares the BROKER_STATUS_KEY query, so the rest of
- *      the UI sees the fresh status too),
- *   3. an effect watches the polled status: when `last_synced_at` advances OR
- *      `status === "error"` we stop, invalidate the synced caches, and toast,
- *   4. if neither happens within ~2.5 min we stop with a gentle nudge.
+ *   1. kick off the POST; on the 202 (sync started) OR a 409 `already_syncing`
+ *      (a sync — ours or another client's — is already running) we begin polling
+ *      `['broker-status']` every ~4s (sharing the query, so the whole UI sees the
+ *      fresh `syncing` status and the button disables),
+ *   2. an effect watches the polled status: we STOP as soon as `status` is no
+ *      longer `"syncing"` (i.e. it became `connected` or `error`), then
+ *      invalidate the synced caches and toast success / the error,
+ *   3. if it never leaves `syncing` within ~3 min we stop with a gentle nudge.
+ *
+ * NOTE: the button's authoritative disabled/"Syncing…" state comes from
+ * `status === "syncing"` on the shared query (survives reloads); `pending` here
+ * only covers the brief window between the click and the first status flip.
  */
 export function useSyncNow() {
   const queryClient = useQueryClient();
-  const [isSyncing, setIsSyncing] = useState(false);
-  // last_synced_at observed at kickoff — completion = this value changing.
-  const baselineSyncedAt = useRef<string | undefined>(undefined);
+  // Local kickoff state: true from the click until polling stops. The card ALSO
+  // disables off the authoritative `status === "syncing"`, so this just covers
+  // the gap before the server has flipped the status.
+  const [pending, setPending] = useState(false);
   const startedAt = useRef<number>(0);
+  // Whether we've yet observed the server-set `syncing` status. We must not
+  // treat the initial (pre-`syncing`) poll as "done" — only a transition AWAY
+  // from `syncing` is completion.
+  const observedSyncing = useRef(false);
 
   // A second observer on the shared status query; only this one polls, and only
   // while a sync is in flight. Other consumers (the card) stay non-polling.
   const polledStatus = useQuery({
     queryKey: BROKER_STATUS_KEY,
     queryFn: () => api.get<BrokerStatus>("/api/broker/trading212/status"),
-    refetchInterval: isSyncing ? SYNC_POLL_INTERVAL_MS : false,
-    enabled: isSyncing,
+    refetchInterval: pending ? SYNC_POLL_INTERVAL_MS : false,
+    enabled: pending,
   });
 
   const mutation = useMutation({
@@ -120,33 +134,34 @@ export function useSyncNow() {
   });
 
   const finish = useCallback(() => {
-    setIsSyncing(false);
-    baselineSyncedAt.current = undefined;
+    setPending(false);
+    observedSyncing.current = false;
     void queryClient.invalidateQueries({ queryKey: ["holdings"] });
     void queryClient.invalidateQueries({ queryKey: ["transactions"] });
     void queryClient.invalidateQueries({ queryKey: ["accounts"] });
     void queryClient.invalidateQueries({ queryKey: BROKER_STATUS_KEY });
   }, [queryClient]);
 
-  // Watch the polled status for completion / error / timeout.
-  const status = polledStatus.data;
+  // Watch the polled status for completion / timeout. Completion = a transition
+  // OUT of `syncing` (→ connected | error), so we never stop before the server
+  // has even started.
+  const status = polledStatus.data?.status;
+  const lastError = polledStatus.data?.last_error;
   useEffect(() => {
-    if (!isSyncing) return;
+    if (!pending) return;
 
-    if (status?.status === "error") {
+    if (status === "syncing") {
+      observedSyncing.current = true;
+      // still running — keep polling (subject to the timeout below)
+    } else if (observedSyncing.current && status === "error") {
       finish();
       toast.error(
-        status.last_error
-          ? `Trading 212 sync failed: ${status.last_error}`
+        lastError
+          ? `Trading 212 sync failed: ${lastError}`
           : "Trading 212 sync failed.",
       );
       return;
-    }
-
-    const advanced =
-      status?.last_synced_at != null &&
-      status.last_synced_at !== baselineSyncedAt.current;
-    if (advanced) {
+    } else if (observedSyncing.current && status === "connected") {
       finish();
       toast.success("Trading 212 synced.");
       return;
@@ -156,22 +171,55 @@ export function useSyncNow() {
       finish();
       toast("Sync is taking a while — pull to refresh later.");
     }
-  }, [isSyncing, status, finish]);
+  }, [pending, status, lastError, finish]);
+
+  // Optimistically reflect the server-authoritative `syncing` status in the
+  // shared cache the instant a sync is (re)started. This (a) disables the button
+  // immediately and (b) records that we've entered `syncing`, so the NEXT poll
+  // that reports `connected`/`error` is unambiguously completion — there is no
+  // race where a stale pre-sync `connected`/`error` is mistaken for "done".
+  const beginObservingSync = useCallback(() => {
+    observedSyncing.current = true;
+    queryClient.setQueryData<BrokerStatus>(BROKER_STATUS_KEY, (prev) =>
+      prev ? { ...prev, status: "syncing" } : prev,
+    );
+    setPending(true);
+  }, [queryClient]);
 
   const start = useCallback(() => {
-    if (isSyncing) return;
-    baselineSyncedAt.current =
-      queryClient.getQueryData<BrokerStatus>(BROKER_STATUS_KEY)?.last_synced_at;
+    if (pending) return;
     startedAt.current = Date.now();
+    observedSyncing.current = false;
     mutation.mutate(undefined, {
       onSuccess: () => {
-        setIsSyncing(true);
+        beginObservingSync();
         toast.success("Sync started…");
       },
-      onError: () =>
-        toast.error("Sync failed — check your connection and try again."),
+      onError: (err) => {
+        // A 409 means a sync is ALREADY running (ours from a prior click, or
+        // another client's). That's not a failure — start observing it.
+        if (err instanceof ApiError && isAlreadySyncing(err)) {
+          beginObservingSync();
+          return;
+        }
+        toast.error("Sync failed — check your connection and try again.");
+      },
     });
-  }, [isSyncing, queryClient, mutation]);
+  }, [pending, mutation, beginObservingSync]);
 
+  // The button is disabled whenever a sync is in flight: either our local
+  // kickoff `pending`, or the authoritative `syncing` status (which survives a
+  // reload and reflects a concurrent client's sync).
+  const isSyncing = pending || status === "syncing";
   return { start, isSyncing };
+}
+
+/** A 409 from POST /sync carrying the server's `already_syncing` error code. */
+function isAlreadySyncing(err: ApiError): boolean {
+  return (
+    err.status === 409 &&
+    typeof err.body === "object" &&
+    err.body !== null &&
+    (err.body as { error?: unknown }).error === "already_syncing"
+  );
 }

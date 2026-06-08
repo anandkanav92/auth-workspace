@@ -33,6 +33,13 @@ type Vars = { Variables: { uid: string; email: string; pbUserId: string } };
 const BROKER = 'trading212' as const;
 const ACCOUNT_LABEL = 'Trading 212';
 
+// How long a `status:'syncing'` row is treated as an authoritative in-progress
+// lock. Past this, we assume the background sync died (process restart, crash)
+// without flipping the status back, so we let a fresh sync through rather than
+// leaving a permanent lock. Sized comfortably above a normal full-history
+// backfill (rate-limited to 6 req/60s).
+const SYNCING_LOCK_TTL_MS = 15 * 60 * 1000;
+
 /** Injected dependencies — narrowed to exactly the repo surface used here. */
 export interface BrokerDeps {
   connections: Pick<
@@ -56,6 +63,9 @@ export interface BrokerDeps {
    * connected user.
    */
   sync?: (pbUserId: string) => Promise<unknown>;
+  /** Injectable clock (ms since epoch) for the syncing-lock TTL check; tests
+   *  override it for determinism. Defaults to Date.now. */
+  now?: () => number;
 }
 
 const connectSchema = z.object({
@@ -195,7 +205,28 @@ export async function disconnectTrading212With(
  * Guards on the connection FIRST: a user with no connection gets a 404 (and the
  * sync never starts), so this can never sync against a missing/other user's
  * connection.
+ *
+ * CONCURRENCY: if the connection is already `status:'syncing'` AND was updated
+ * recently (within SYNCING_LOCK_TTL_MS), a sync is already in flight — reject
+ * with 409 `already_syncing` so a re-click (or a second client) can't kick off a
+ * duplicate background sync. A stale `syncing` row (TTL elapsed → presumed dead
+ * sync) is NOT a lock, so a fresh sync proceeds.
  */
+/**
+ * Is this connection an authoritative in-progress sync lock? True only when the
+ * status is 'syncing' AND the row was updated within SYNCING_LOCK_TTL_MS — a
+ * stale `syncing` row (presumed-dead sync) does not lock. An unparseable/missing
+ * `updated` timestamp is treated as stale (no lock), so a malformed row can never
+ * wedge the user out of syncing.
+ */
+function isSyncingRecently(conn: BrokerConnection, deps: BrokerDeps): boolean {
+  if (conn.status !== 'syncing') return false;
+  const updatedMs = Date.parse(conn.updated);
+  if (Number.isNaN(updatedMs)) return false;
+  const nowMs = deps.now?.() ?? Date.now();
+  return nowMs - updatedMs < SYNCING_LOCK_TTL_MS;
+}
+
 export async function syncTrading212With(
   pbUserId: string,
   deps: BrokerDeps,
@@ -204,6 +235,11 @@ export async function syncTrading212With(
   if (!conn) {
     throw new HTTPException(404, {
       res: Response.json({ error: 'not_connected' }, { status: 404 }),
+    });
+  }
+  if (isSyncingRecently(conn, deps)) {
+    throw new HTTPException(409, {
+      res: Response.json({ error: 'already_syncing' }, { status: 409 }),
     });
   }
   if (!deps.sync) {

@@ -185,24 +185,28 @@ describe("SettingsPage — Connect Trading 212", () => {
     });
   });
 
-  it("connected: Sync now kicks off (202), polls, then toasts success on completion", async () => {
+  it("connected: Sync now kicks off (202), observes syncing→connected, toasts success", async () => {
     const user = userEvent.setup();
-    // The card's first status fetch sets the baseline (10:00). The very next
-    // status fetch — the poll the sync flow triggers — reports an advanced
-    // timestamp, standing in for the background sync having finished.
-    let syncedAt = "2026-06-07T10:00:00.000Z";
+    // Server-authoritative lifecycle: the kickoff optimistically marks the
+    // connection `syncing`; the next poll reports it back to `connected` (sync
+    // finished) → completion.
+    let statusValue: Record<string, unknown> = {
+      connected: true,
+      status: "connected",
+      last_synced_at: "2026-06-07T10:00:00.000Z",
+    };
     apiGet.mockImplementation((path: string) => {
       if (path === "/api/accounts") return Promise.resolve(accountsResponse);
-      return Promise.resolve({
+      return Promise.resolve(statusValue);
+    });
+    // 202 fire-and-forget: returns immediately; the background sync then
+    // "completes" so the next poll reports the advanced timestamp.
+    apiPost.mockImplementation(() => {
+      statusValue = {
         connected: true,
         status: "connected",
-        last_synced_at: syncedAt,
-      });
-    });
-    // 202 fire-and-forget: returns immediately, sync runs in the background.
-    apiPost.mockImplementation(() => {
-      // Once kicked off, the background sync "completes" — the next poll sees it.
-      syncedAt = "2026-06-07T11:00:00.000Z";
+        last_synced_at: "2026-06-07T11:00:00.000Z",
+      };
       return Promise.resolve({ ok: true, started: true });
     });
 
@@ -252,6 +256,8 @@ describe("SettingsPage — Connect Trading 212", () => {
 
   it("connected: a sync that errors server-side surfaces the error toast", async () => {
     const user = userEvent.setup();
+    // syncing → error lifecycle: the POST flips to `syncing`, a later poll
+    // reports `error` with last_error.
     let statusValue: Record<string, unknown> = {
       connected: true,
       status: "connected",
@@ -278,6 +284,59 @@ describe("SettingsPage — Connect Trading 212", () => {
         expect.stringMatching(/ip_blocked/i),
       ),
     );
+  });
+
+  it("connected with status:syncing: button is disabled and shows Syncing…", async () => {
+    // Authoritative state on load (e.g. after a reload mid-sync, or a concurrent
+    // client's sync): the button must be disabled without any local kickoff.
+    brokerStatusResponse = { connected: true, status: "syncing" };
+
+    renderSettings();
+
+    const button = await screen.findByRole("button", { name: /^Syncing…$/ });
+    expect(button).toBeDisabled();
+    // No reconnect banner while merely syncing.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("connected: a 409 already_syncing kickoff begins observing (no error toast)", async () => {
+    const user = userEvent.setup();
+    let statusValue: Record<string, unknown> = {
+      connected: true,
+      status: "connected",
+      last_synced_at: "2026-06-07T10:00:00.000Z",
+    };
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/api/accounts") return Promise.resolve(accountsResponse);
+      return Promise.resolve(statusValue);
+    });
+    // The POST 409s (a sync is already running); the next poll then sees it
+    // finish (back to connected).
+    apiPost.mockImplementation(() => {
+      statusValue = {
+        connected: true,
+        status: "connected",
+        last_synced_at: "2026-06-07T11:00:00.000Z",
+      };
+      return Promise.reject(
+        new ApiError(409, "already_syncing", { error: "already_syncing" }),
+      );
+    });
+
+    renderSettings();
+
+    await user.click(
+      await screen.findByRole("button", { name: /^Sync now$/ }),
+    );
+
+    // 409 is not a failure — we begin observing and it completes → success toast.
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith(
+        expect.stringMatching(/trading 212 synced/i),
+      ),
+    );
+    // ...and no error toast was shown for the 409.
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("connected: a failed Sync now kickoff surfaces an error toast", async () => {

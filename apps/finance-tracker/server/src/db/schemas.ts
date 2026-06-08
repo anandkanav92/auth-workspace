@@ -37,7 +37,7 @@ const importStatusEnum = z.enum(['success', 'partial', 'failed']);
 const assetTypeEnum = z.enum(['stock', 'etf', 'other']);
 const dataSourceEnum = z.enum(['yahoo', 'finnhub']);
 const brokerEnum = z.enum(['trading212']);
-const brokerStatusEnum = z.enum(['connected', 'error']);
+const brokerStatusEnum = z.enum(['connected', 'error', 'syncing']);
 
 // =====================================================================
 // Per-user collections

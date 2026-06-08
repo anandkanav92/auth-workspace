@@ -162,6 +162,28 @@ describe('PocketBase per-user isolation (Spike 5)', () => {
     }
   });
 
+  it("broker_connections accepts status='syncing' after the migration", async () => {
+    // Guards migration 1780900300: the SelectField must now allow 'syncing' (the
+    // server-authoritative in-progress lock) alongside connected/error. If the
+    // migration didn't widen the values, this create is rejected.
+    const aId = pbA.authStore.record!.id;
+    const row = await pbA.collection('broker_connections').create({
+      user: aId,
+      broker: 'trading212',
+      api_key_enc: 'syncing-test.y.z',
+      status: 'syncing',
+    });
+    expect(row.status).toBe('syncing');
+
+    // It can be flipped back to connected/error (the full lifecycle).
+    const updated = await pbA
+      .collection('broker_connections')
+      .update(row.id, { status: 'connected' });
+    expect(updated.status).toBe('connected');
+
+    await pbA.collection('broker_connections').delete(row.id);
+  });
+
   it("subscribe('*'): user A receives NO realtime event for user B's create (accounts)", async () => {
     const aReceived: Array<{ label: string; user: string }> = [];
 

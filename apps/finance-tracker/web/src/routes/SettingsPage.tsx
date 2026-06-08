@@ -217,11 +217,15 @@ function ConnectedState({
   syncStatus,
   lastSyncedAt,
 }: {
-  syncStatus?: "connected" | "error";
+  syncStatus?: "connected" | "error" | "syncing";
   lastSyncedAt?: string;
 }) {
   const disconnect = useDisconnectBroker();
   const syncNow = useSyncNow();
+  // Disable + show "Syncing…" whenever a sync is in flight: either our local
+  // kickoff (syncNow.isSyncing) OR the server-authoritative status (which
+  // survives a reload and reflects a concurrent client's sync).
+  const syncing = syncNow.isSyncing || syncStatus === "syncing";
 
   function handleDisconnect() {
     disconnect.mutate(undefined, {
@@ -265,9 +269,9 @@ function ConnectedState({
           type="button"
           size="sm"
           onClick={syncNow.start}
-          disabled={syncNow.isSyncing}
+          disabled={syncing}
         >
-          {syncNow.isSyncing ? "Syncing…" : "Sync now"}
+          {syncing ? "Syncing…" : "Sync now"}
         </Button>
 
         <Button

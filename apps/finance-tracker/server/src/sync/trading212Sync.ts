@@ -94,6 +94,16 @@ export async function runTrading212SyncWith(
   if (!conn) return { skipped: true };
 
   try {
+    // Mark the connection as actively syncing (clearing any prior error) BEFORE
+    // any network work. This is the server-authoritative "in progress" signal:
+    // the UI shows a disabled "Syncing…" button off it (survives reloads) and the
+    // sync route rejects a concurrent sync while it's set. The finally clauses
+    // below always flip it to connected|error, so it never sticks on a happy path.
+    await deps.connections.update(conn.id, {
+      status: 'syncing',
+      last_error: '',
+    });
+
     const creds = deps.decrypt(conn.api_key_enc);
 
     const accounts = await deps.accounts.list(userId);

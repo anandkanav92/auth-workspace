@@ -319,6 +319,53 @@ describe('runTrading212SyncWith', () => {
     expect(conn.last_error ?? '').toBe('');
   });
 
+  it('sets status=syncing at the START, then status=connected on success', async () => {
+    const fakes = makeFakes();
+    const deps = depsFrom(fakes, makeProvider());
+
+    await runTrading212SyncWith(deps, 'u1');
+
+    // The FIRST connection update marks it syncing (clearing last_error) before
+    // any network work; the LAST stamps it connected + last_synced_at.
+    const calls = fakes.connectionsRepo.update.mock.calls;
+    expect(calls[0]).toEqual([
+      'conn-1',
+      { status: 'syncing', last_error: '' },
+    ]);
+    const last = calls[calls.length - 1][1] as Record<string, unknown>;
+    expect(last).toMatchObject({
+      status: 'connected',
+      last_synced_at: '2026-06-08T12:00:00.000Z',
+      last_error: '',
+    });
+
+    // Final persisted state.
+    const conn = fakes.peek.connections()[0];
+    expect(conn.status).toBe('connected');
+  });
+
+  it('sets status=syncing at the START, then status=error on failure', async () => {
+    const fakes = makeFakes();
+    const deps = depsFrom(fakes, makeProvider({ throwOnPositions: true }));
+
+    await expect(runTrading212SyncWith(deps, 'u1')).rejects.toThrow(
+      Trading212ApiError,
+    );
+
+    const calls = fakes.connectionsRepo.update.mock.calls;
+    // First call marks syncing...
+    expect(calls[0]).toEqual([
+      'conn-1',
+      { status: 'syncing', last_error: '' },
+    ]);
+    // ...last call records the error.
+    const last = calls[calls.length - 1][1] as Record<string, unknown>;
+    expect(last).toMatchObject({ status: 'error' });
+    expect(last.last_error).toBeTruthy();
+
+    expect(fakes.peek.connections()[0].status).toBe('error');
+  });
+
   it('normalizes a date-only dividend with no quantity to quantity 0 + ISO occurred_at', async () => {
     const fakes = makeFakes();
     const provider = makeProvider();
