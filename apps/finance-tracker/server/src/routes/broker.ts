@@ -156,7 +156,9 @@ export async function disconnectTrading212With(
 ): Promise<{ ok: true }> {
   const conn = await deps.connections.getForUser(pbUserId, BROKER);
   if (!conn) {
-    throw new HTTPException(404, { message: 'not_found' });
+    throw new HTTPException(404, {
+      res: Response.json({ error: 'not_found' }, { status: 404 }),
+    });
   }
   await deps.connections.delete(conn.id);
   return { ok: true };
