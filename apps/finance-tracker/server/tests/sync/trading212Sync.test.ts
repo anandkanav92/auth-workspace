@@ -305,7 +305,8 @@ describe('runTrading212SyncWith', () => {
     expect(txs).toHaveLength(4);
     const div = txs.find((t) => t.external_id === 'd1')!;
     expect(div.type).toBe('dividend');
-    expect(div.occurred_at).toBe('2025-03-01T00:00:00Z');
+    // occurred_at is normalised to an ISO string (DateField-safe).
+    expect(div.occurred_at).toBe('2025-03-01T00:00:00.000Z');
 
     // pagination followed to completion (2 calls each: cursor + no cursor)
     expect(provider.fetchOrders).toHaveBeenCalledTimes(2);
@@ -316,6 +317,47 @@ describe('runTrading212SyncWith', () => {
     expect(conn.status).toBe('connected');
     expect(conn.last_synced_at).toBe('2026-06-08T12:00:00.000Z');
     expect(conn.last_error ?? '').toBe('');
+  });
+
+  it('normalizes a date-only dividend with no quantity to quantity 0 + ISO occurred_at', async () => {
+    const fakes = makeFakes();
+    const provider = makeProvider();
+    // A dividend the way T212 actually reports it: no `quantity`, and a
+    // date-only `paidOn` (not a full ISO timestamp). The sync must default
+    // quantity to 0 and normalise the date to a valid ISO string.
+    provider.fetchDividends.mockImplementation(
+      async (_creds: string, cursor?: string): Promise<LedgerPage> => {
+        if (cursor) return { items: [], nextCursor: undefined };
+        return {
+          items: [
+            {
+              externalId: 'd-dateonly',
+              type: 'dividend',
+              t212Ticker: 'AAPL_US_EQ',
+              isin: 'US0378331005',
+              name: 'Apple Inc.',
+              currency: 'USD',
+              // no quantity
+              amount: 3.3,
+              amountEur: 3.0,
+              occurredAt: '2025-05-01', // date-only
+            },
+          ],
+          nextCursor: undefined,
+        };
+      },
+    );
+    const deps = depsFrom(fakes, provider);
+
+    const result = await runTrading212SyncWith(deps, 'u1');
+    expect(result).toMatchObject({ dividends: 1 });
+
+    const row = fakes.peek.transactions().find((t) => t.external_id === 'd-dateonly')!;
+    expect(row).toBeTruthy();
+    expect(row.quantity).toBe(0);
+    // occurred_at is a valid ISO 8601 timestamp parseable back to the date.
+    expect(Number.isNaN(new Date(row.occurred_at).getTime())).toBe(false);
+    expect(row.occurred_at).toBe('2025-05-01T00:00:00.000Z');
   });
 
   it('skips when the user has no connection', async () => {

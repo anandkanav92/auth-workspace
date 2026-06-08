@@ -218,6 +218,23 @@ describe('TransactionsRepo', () => {
       await transactionsRepo.delete(first.id);
     });
 
+    // Migration 1780900200 relaxed transactions.quantity (required → optional)
+    // because PocketBase treats a required NumberField 0 as blank. A dividend
+    // ledger row carries quantity 0 — before the relaxation PocketBase rejected
+    // it with a 400 "Failed to create record." This proves it now persists.
+    it('a dividend-like row with quantity 0 upserts successfully', async () => {
+      const extId = `t212-div-zeroqty-${Date.now()}`;
+      const created = await transactionsRepo.upsertByExternalId(
+        syncRow(extId, { type: 'dividend', quantity: 0, ticker: 'DIVZERO' }),
+      );
+
+      expect(created.id).toBeTruthy();
+      expect(created.quantity).toBe(0);
+      expect(created.type).toBe('dividend');
+
+      await transactionsRepo.delete(created.id);
+    });
+
     it('different external_ids create distinct rows', async () => {
       const base = `t212-distinct-${Date.now()}`;
       const a = await transactionsRepo.upsertByExternalId(syncRow(`${base}-1`));

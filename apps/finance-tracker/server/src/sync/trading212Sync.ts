@@ -252,12 +252,34 @@ async function upsertLedgerRow(
     price: event.type === 'dividend' ? event.amount : event.price,
     currency,
     fee: event.fee,
-    occurred_at: event.occurredAt,
+    // T212 gives ISO timestamps for orders (filledAt) but dividend paidOn may be
+    // date-only — normalise both to an ISO string PocketBase's DateField accepts.
+    // A single bad timestamp must not abort the whole sync, so fall back to now.
+    occurred_at: normalizeOccurredAt(event.occurredAt, deps.now),
     source: BROKER,
     external_id: event.externalId,
   };
 
-  await deps.transactions.upsertByExternalId(row);
+  try {
+    await deps.transactions.upsertByExternalId(row);
+  } catch (err) {
+    // Surface the PocketBase field detail so the connection's last_error is
+    // self-diagnostic (e.g. `{ quantity: ... }`) instead of "Failed to create record."
+    const detail =
+      (err as { response?: { data?: unknown } })?.response?.data ??
+      (err as { message?: string })?.message;
+    throw new Error('transaction upsert failed: ' + JSON.stringify(detail));
+  }
+}
+
+/** Normalise a ledger timestamp (ISO or date-only) to an ISO string the
+ *  DateField accepts; fall back to now on an unparseable value. */
+function normalizeOccurredAt(occurredAt: string, now?: () => Date): string {
+  const d = new Date(occurredAt);
+  if (Number.isNaN(d.getTime())) {
+    return (now?.() ?? new Date()).toISOString();
+  }
+  return d.toISOString();
 }
 
 // --- production binding -------------------------------------------------------
