@@ -105,6 +105,16 @@ interface RawTax {
   chargedAt: string;
 }
 
+interface RawFill {
+  quantity: number;
+  price: number;
+  filledAt: string;
+  walletImpact?: {
+    fxRate?: number;
+    taxes?: RawTax[];
+  };
+}
+
 interface RawOrderItem {
   order: {
     id: number;
@@ -112,15 +122,9 @@ interface RawOrderItem {
     ticker: string;
     instrument: RawInstrument;
   };
-  fill: {
-    quantity: number;
-    price: number;
-    filledAt: string;
-    walletImpact: {
-      fxRate: number;
-      taxes?: RawTax[];
-    };
-  };
+  // Non-executed orders (cancelled/rejected/expired) have an `order` but no
+  // `fill` (or `fill: null`), so this is optional/nullable.
+  fill?: RawFill | null;
 }
 
 interface RawOrdersPage {
@@ -231,14 +235,19 @@ export class Trading212Provider implements BrokerProvider {
     // backfill loop. An empty page must ONLY come from a genuine `items: []`.
     if (!ok) throw new Trading212ApiError(`orders fetch failed (status ${status})`, status);
     const page = body as RawOrdersPage;
-    const items = page.items.map((it) => this.mapOrder(it));
+    // Only EXECUTED orders (those with a `fill`) are ledger rows. Real history
+    // also returns non-executed orders (cancelled/rejected/expired) that have an
+    // `order` but no `fill` — skip them rather than crash on `fill.walletImpact`.
+    const items = page.items
+      .filter((it): it is RawOrderItem & { fill: RawFill } => it.fill != null)
+      .map((it) => this.mapOrder(it));
     return { items, nextCursor: page.nextPagePath ?? undefined };
   }
 
-  private mapOrder(it: RawOrderItem): LedgerEvent {
+  private mapOrder(it: RawOrderItem & { fill: RawFill }): LedgerEvent {
     const { order, fill } = it;
     const ccy = order.instrument.currency;
-    const fee = (fill.walletImpact.taxes ?? []).reduce((sum, t) => sum + t.quantity, 0);
+    const fee = (fill?.walletImpact?.taxes ?? []).reduce((sum, t) => sum + t.quantity, 0);
     return {
       externalId: String(order.id),
       type: order.side.toLowerCase() as 'buy' | 'sell',
@@ -251,7 +260,7 @@ export class Trading212Provider implements BrokerProvider {
       // GBX/GBp prices are quoted in pence — normalise to GBP major units.
       price: normalizePence(fill.price, ccy).amount,
       fee,
-      fxRate: fill.walletImpact.fxRate,
+      fxRate: fill?.walletImpact?.fxRate,
       occurredAt: fill.filledAt,
     };
   }

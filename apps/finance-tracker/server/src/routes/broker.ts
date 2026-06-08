@@ -252,10 +252,21 @@ function buildRouter(resolveDeps: () => BrokerDeps | Promise<BrokerDeps>) {
       return c.json(result);
     })
     .post('/trading212/sync', async (c) => {
-      const result = await syncTrading212With(
-        c.var.pbUserId,
-        await resolveDeps(),
-      );
+      const deps = await resolveDeps();
+      let result: unknown;
+      try {
+        result = await syncTrading212With(c.var.pbUserId, deps);
+      } catch (err) {
+        // The sync service already stamps status='error' + last_error on the
+        // connection, so the UI banner + toast surface the failure. Translate a
+        // sync failure into a clean 502 instead of leaking a raw 500. (A 404 from
+        // the no-connection guard is an HTTPException and rethrown untouched.)
+        if (err instanceof HTTPException) throw err;
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new HTTPException(502, {
+          res: Response.json({ error: 'sync_failed', detail }, { status: 502 }),
+        });
+      }
       return c.json({ ok: true, result });
     });
 }

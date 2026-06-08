@@ -180,6 +180,65 @@ describe('Trading212Provider.fetchOrders', () => {
     });
   });
 
+  it('skips non-executed orders that have no fill (cancelled/rejected/expired)', async () => {
+    // Real order history mixes executed trades (with a `fill`) and non-executed
+    // orders (cancelled/rejected/expired) that have an `order` but no `fill`.
+    // The latter are not ledger rows and must be skipped — not crash the sync.
+    mockFetch({
+      '/equity/history/orders': {
+        body: {
+          items: [
+            {
+              order: {
+                id: 2001,
+                side: 'BUY',
+                ticker: 'AAPL_US_EQ',
+                instrument: { ticker: 'AAPL_US_EQ', name: 'Apple Inc', isin: 'US0378331005', currency: 'USD' },
+              },
+              fill: {
+                quantity: 2,
+                price: 180.25,
+                filledAt: '2025-01-10T09:30:00.000Z',
+                walletImpact: { currency: 'EUR', fxRate: 0.92 },
+              },
+            },
+            {
+              // Cancelled order — has an order but fill is null. Must be skipped.
+              order: {
+                id: 2002,
+                side: 'BUY',
+                ticker: 'TSLA_US_EQ',
+                instrument: { ticker: 'TSLA_US_EQ', name: 'Tesla Inc', isin: 'US88160R1014', currency: 'USD' },
+              },
+              fill: null,
+            },
+            {
+              order: {
+                id: 2003,
+                side: 'SELL',
+                ticker: 'AAPL_US_EQ',
+                instrument: { ticker: 'AAPL_US_EQ', name: 'Apple Inc', isin: 'US0378331005', currency: 'USD' },
+              },
+              fill: {
+                quantity: 1,
+                price: 195.1,
+                filledAt: '2025-02-01T14:00:00.000Z',
+                walletImpact: { currency: 'EUR', fxRate: 0.93 },
+              },
+            },
+          ],
+          nextPagePath: null,
+        },
+      },
+    });
+    const p = new Trading212Provider(noopSleep);
+    const { items } = await p.fetchOrders(CREDS);
+
+    // Only the two FILLED orders become ledger events; the fill-less one is dropped.
+    expect(items).toHaveLength(2);
+    expect(items.map((i) => i.externalId)).toEqual(['2001', '2003']);
+  });
+
   it('follows nextPagePath across two pages then stops', async () => {
     const page1 = {
       items: [

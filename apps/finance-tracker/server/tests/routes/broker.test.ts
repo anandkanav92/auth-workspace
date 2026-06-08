@@ -449,6 +449,24 @@ describe('broker routes over HTTP (user-scoped)', () => {
     expect(sync).toHaveBeenCalledWith('u1');
   });
 
+  it('POST /trading212/sync returns a clean 502 sync_failed when the sync throws', async () => {
+    const sync = vi.fn(async () => {
+      throw new Error('orders fetch failed (status 500)');
+    });
+    const syncDeps = depsFrom(fakes, okProvider(), { sync });
+    await connectTrading212With('u1', { apiKey: 'k', apiSecret: 's' }, syncDeps);
+    const app = appAs(syncDeps, 'u1');
+
+    const res = await app.request('/api/broker/trading212/sync', {
+      method: 'POST',
+    });
+    // A failing sync must surface as a clean 502 — NOT an unhandled raw 500.
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body).toMatchObject({ error: 'sync_failed' });
+    expect(body.detail).toContain('orders fetch failed');
+  });
+
   it('POST /trading212/sync is a 404 when the user has no connection', async () => {
     const sync = vi.fn();
     const syncDeps = depsFrom(fakes, okProvider(), { sync });
