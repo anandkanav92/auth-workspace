@@ -72,27 +72,35 @@ function renderSettings() {
 }
 
 describe("SettingsPage — Connect Trading 212", () => {
-  it("disconnected: renders the connect form and POSTs the key", async () => {
+  it("disconnected: renders the two-key form and POSTs both keys", async () => {
     const user = userEvent.setup();
     apiGet.mockResolvedValue({ connected: false });
     apiPost.mockResolvedValue({ ok: true });
 
     const { invalidateSpy } = renderSettings();
 
-    const input = await screen.findByLabelText(/api key/i);
-    expect(input).toHaveAttribute("type", "password");
+    const publicInput = await screen.findByLabelText(/public \(api\) key/i);
+    const secretInput = screen.getByLabelText(/private \(secret\) key/i);
+    expect(publicInput).toHaveAttribute("type", "password");
+    expect(secretInput).toHaveAttribute("type", "password");
     // Glossary card is preserved.
     expect(
       screen.getByText(/understanding your metrics/i),
     ).toBeInTheDocument();
 
-    await user.type(input, "  my-key  ");
+    // Connect stays disabled until BOTH fields are filled.
+    expect(screen.getByRole("button", { name: /^Connect$/ })).toBeDisabled();
+    await user.type(publicInput, "  my-pub  ");
+    expect(screen.getByRole("button", { name: /^Connect$/ })).toBeDisabled();
+    await user.type(secretInput, "  my-priv  ");
+
     await user.click(screen.getByRole("button", { name: /^Connect$/ }));
 
     await waitFor(() => {
-      // Key is trimmed before sending.
+      // Both keys are trimmed before sending.
       expect(apiPost).toHaveBeenCalledWith("/api/broker/trading212/connect", {
-        apiKey: "my-key",
+        apiKey: "my-pub",
+        apiSecret: "my-priv",
       });
     });
 
@@ -115,7 +123,14 @@ describe("SettingsPage — Connect Trading 212", () => {
 
     renderSettings();
 
-    await user.type(await screen.findByLabelText(/api key/i), "bad-key");
+    await user.type(
+      await screen.findByLabelText(/public \(api\) key/i),
+      "bad-pub",
+    );
+    await user.type(
+      screen.getByLabelText(/private \(secret\) key/i),
+      "bad-priv",
+    );
     await user.click(screen.getByRole("button", { name: /^Connect$/ }));
 
     await waitFor(() => {

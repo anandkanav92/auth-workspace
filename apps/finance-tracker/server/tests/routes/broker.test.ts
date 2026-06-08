@@ -108,27 +108,36 @@ function rejectingProvider() {
 // --- connect handler --------------------------------------------------------
 
 describe('connectTrading212With', () => {
-  it('validates the key, then stores an ENCRYPTED key and returns ok (never the key)', async () => {
+  it('combines both keys, validates, then stores the ENCRYPTED combined creds and returns ok (never the key)', async () => {
     const fakes = makeFakes();
     const provider = okProvider({ accountId: 'acct-9', currency: 'GBP' });
     const deps = depsFrom(fakes, provider);
 
-    const RAW = 'super-secret-api-key';
-    const result = await connectTrading212With('u1', { apiKey: RAW }, deps);
+    const PUB = 'public-key-123';
+    const PRIV = 'private-secret-456';
+    const COMBINED = `${PUB}:${PRIV}`;
+    const result = await connectTrading212With(
+      'u1',
+      { apiKey: PUB, apiSecret: PRIV },
+      deps,
+    );
 
-    expect(provider.validateKey).toHaveBeenCalledWith(RAW);
+    // T212 Basic auth → provider sees the combined "<public>:<private>" string.
+    expect(provider.validateKey).toHaveBeenCalledWith(COMBINED);
     expect(result).toEqual({ ok: true });
-    // never echoes the key in any form
-    expect(JSON.stringify(result)).not.toContain(RAW);
+    // never echoes either key in any form
+    expect(JSON.stringify(result)).not.toContain(PUB);
+    expect(JSON.stringify(result)).not.toContain(PRIV);
 
     const stored = fakes.peek.connections();
     expect(stored).toHaveLength(1);
     const conn = stored[0];
-    // stored value must be the ciphertext, NOT the raw key
-    expect(conn.api_key_enc).not.toBe(RAW);
-    expect(conn.api_key_enc).not.toContain(RAW);
-    // and it must round-trip back to the raw key
-    expect(decryptSecret(conn.api_key_enc, HEX_KEY)).toBe(RAW);
+    // stored value must be the ciphertext, NOT the raw creds
+    expect(conn.api_key_enc).not.toBe(COMBINED);
+    expect(conn.api_key_enc).not.toContain(PUB);
+    expect(conn.api_key_enc).not.toContain(PRIV);
+    // and it must round-trip back to the combined "pub:priv" creds
+    expect(decryptSecret(conn.api_key_enc, HEX_KEY)).toBe(COMBINED);
 
     expect(conn).toMatchObject({
       user: 'u1',
@@ -143,7 +152,7 @@ describe('connectTrading212With', () => {
     const fakes = makeFakes();
     const deps = depsFrom(fakes, okProvider());
 
-    await connectTrading212With('u1', { apiKey: 'k' }, deps);
+    await connectTrading212With('u1', { apiKey: 'k', apiSecret: 's' }, deps);
 
     const accts = fakes.peek.accounts();
     expect(accts).toHaveLength(1);
@@ -160,7 +169,7 @@ describe('connectTrading212With', () => {
     } as Partial<Account>);
     const deps = depsFrom(fakes, okProvider());
 
-    await connectTrading212With('u1', { apiKey: 'k' }, deps);
+    await connectTrading212With('u1', { apiKey: 'k', apiSecret: 's' }, deps);
 
     expect(
       fakes.peek.accounts().filter((a) => a.source === 'trading212'),
@@ -178,13 +187,19 @@ describe('connectTrading212With', () => {
     } as Partial<BrokerConnection>);
     const deps = depsFrom(fakes, okProvider());
 
-    await connectTrading212With('u1', { apiKey: 'new-key' }, deps);
+    await connectTrading212With(
+      'u1',
+      { apiKey: 'new-pub', apiSecret: 'new-priv' },
+      deps,
+    );
 
     const stored = fakes.peek.connections();
     expect(stored).toHaveLength(1); // upsert, not a duplicate
     expect(stored[0].status).toBe('connected');
     expect(stored[0].last_error ?? '').toBe('');
-    expect(decryptSecret(stored[0].api_key_enc, HEX_KEY)).toBe('new-key');
+    expect(decryptSecret(stored[0].api_key_enc, HEX_KEY)).toBe(
+      'new-pub:new-priv',
+    );
   });
 
   it('rejects an invalid key with 400 and stores NOTHING', async () => {
@@ -193,10 +208,10 @@ describe('connectTrading212With', () => {
     const deps = depsFrom(fakes, provider);
 
     await expect(
-      connectTrading212With('u1', { apiKey: 'bad' }, deps),
+      connectTrading212With('u1', { apiKey: 'bad', apiSecret: 'creds' }, deps),
     ).rejects.toMatchObject({ status: 400 });
 
-    expect(provider.validateKey).toHaveBeenCalledWith('bad');
+    expect(provider.validateKey).toHaveBeenCalledWith('bad:creds');
     expect(fakes.peek.connections()).toHaveLength(0);
     expect(fakes.peek.accounts()).toHaveLength(0);
   });
@@ -206,7 +221,7 @@ describe('connectTrading212With', () => {
     const onConnected = vi.fn();
     const deps = { ...depsFrom(fakes, okProvider()), onConnected };
 
-    await connectTrading212With('u1', { apiKey: 'k' }, deps);
+    await connectTrading212With('u1', { apiKey: 'k', apiSecret: 's' }, deps);
 
     expect(onConnected).toHaveBeenCalledWith('u1');
   });
@@ -308,17 +323,18 @@ describe('broker routes over HTTP (user-scoped)', () => {
     deps = depsFrom(fakes, okProvider());
   });
 
-  it('POST /trading212/connect returns ok and never the key', async () => {
+  it('POST /trading212/connect returns ok and never either key', async () => {
     const app = appAs(deps, 'u1');
     const res = await app.request('/api/broker/trading212/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey: 'raw-key-123' }),
+      body: JSON.stringify({ apiKey: 'pub-123', apiSecret: 'priv-456' }),
     });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ ok: true });
-    expect(JSON.stringify(body)).not.toContain('raw-key-123');
+    expect(JSON.stringify(body)).not.toContain('pub-123');
+    expect(JSON.stringify(body)).not.toContain('priv-456');
   });
 
   it('POST /trading212/connect with an empty apiKey is a 400 (zod)', async () => {
@@ -326,7 +342,18 @@ describe('broker routes over HTTP (user-scoped)', () => {
     const res = await app.request('/api/broker/trading212/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey: '' }),
+      body: JSON.stringify({ apiKey: '', apiSecret: 's' }),
+    });
+    expect(res.status).toBe(400);
+    expect(fakes.peek.connections()).toHaveLength(0);
+  });
+
+  it('POST /trading212/connect with an empty apiSecret is a 400 (zod)', async () => {
+    const app = appAs(deps, 'u1');
+    const res = await app.request('/api/broker/trading212/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'pub', apiSecret: '' }),
     });
     expect(res.status).toBe(400);
     expect(fakes.peek.connections()).toHaveLength(0);
@@ -334,7 +361,7 @@ describe('broker routes over HTTP (user-scoped)', () => {
 
   it('GET /trading212/status never includes api_key_enc', async () => {
     // u1 connects, then reads status
-    await connectTrading212With('u1', { apiKey: 'secret' }, deps);
+    await connectTrading212With('u1', { apiKey: 'secret', apiSecret: 'priv' }, deps);
     const app = appAs(deps, 'u1');
     const res = await app.request('/api/broker/trading212/status');
     expect(res.status).toBe(200);
@@ -345,7 +372,7 @@ describe('broker routes over HTTP (user-scoped)', () => {
   });
 
   it('IDOR: user B cannot see or delete user A\'s connection', async () => {
-    await connectTrading212With('userA', { apiKey: 'a-key' }, deps);
+    await connectTrading212With('userA', { apiKey: 'a-key', apiSecret: 'a-sec' }, deps);
 
     // user B reads status → not connected (scoped to B)
     const appB = appAs(deps, 'userB');
@@ -363,7 +390,7 @@ describe('broker routes over HTTP (user-scoped)', () => {
   });
 
   it('DELETE /trading212 removes the authed user\'s row', async () => {
-    await connectTrading212With('u1', { apiKey: 'k' }, deps);
+    await connectTrading212With('u1', { apiKey: 'k', apiSecret: 's' }, deps);
     const app = appAs(deps, 'u1');
     const res = await app.request('/api/broker/trading212', { method: 'DELETE' });
     expect(res.status).toBe(200);

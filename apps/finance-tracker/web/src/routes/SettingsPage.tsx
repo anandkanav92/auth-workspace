@@ -100,23 +100,30 @@ function CardLoading() {
 }
 
 function DisconnectedState() {
+  // T212 uses HTTP Basic auth with TWO keys (public + private); the server
+  // combines them as "<public>:<private>". Both are required.
   const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
   const connect = useConnectBroker();
 
+  const canConnect = apiKey.trim() !== "" && apiSecret.trim() !== "";
+
   function handleConnect() {
-    const trimmed = apiKey.trim();
-    if (!trimmed) return;
+    const trimmedKey = apiKey.trim();
+    const trimmedSecret = apiSecret.trim();
+    if (!trimmedKey || !trimmedSecret) return;
     connect.mutate(
-      { apiKey: trimmed },
+      { apiKey: trimmedKey, apiSecret: trimmedSecret },
       {
         onSuccess: () => {
           setApiKey("");
+          setApiSecret("");
           toast.success("Trading 212 connected.");
         },
         onError: (err) => {
           const code =
             err instanceof ApiError && isInvalidKey(err)
-              ? "That API key was rejected — check it's a valid read-only key."
+              ? "Those API keys were rejected — check they're a valid read-only pair."
               : "Couldn't connect to Trading 212. Please try again.";
           toast.error(code);
         },
@@ -131,7 +138,7 @@ function DisconnectedState() {
           htmlFor="t212-api-key"
           className="block text-xs font-medium text-fg"
         >
-          API key
+          Public (API) key
         </label>
         <input
           id="t212-api-key"
@@ -139,7 +146,25 @@ function DisconnectedState() {
           autoComplete="off"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder="Paste your read-only key"
+          placeholder="Paste your public read-only key"
+          className="h-10 w-full rounded-md border border-border bg-bg px-3 text-sm text-fg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label
+          htmlFor="t212-api-secret"
+          className="block text-xs font-medium text-fg"
+        >
+          Private (secret) key
+        </label>
+        <input
+          id="t212-api-secret"
+          type="password"
+          autoComplete="off"
+          value={apiSecret}
+          onChange={(e) => setApiSecret(e.target.value)}
+          placeholder="Paste your private secret key"
           className="h-10 w-full rounded-md border border-border bg-bg px-3 text-sm text-fg outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
@@ -160,7 +185,7 @@ function DisconnectedState() {
         type="button"
         size="sm"
         onClick={handleConnect}
-        disabled={!apiKey.trim() || connect.isPending}
+        disabled={!canConnect || connect.isPending}
       >
         {connect.isPending ? "Connecting…" : "Connect"}
       </Button>

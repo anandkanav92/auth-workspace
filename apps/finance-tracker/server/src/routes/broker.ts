@@ -4,7 +4,7 @@
 // so user A can never read or mutate user B's connection (the admin repos bypass
 // PocketBase rules; see _helpers.ts / perUserRepo.ts).
 //
-//   POST   /api/broker/trading212/connect  { apiKey } → validate → encrypt+store
+//   POST   /api/broker/trading212/connect  { apiKey, apiSecret } → validate → encrypt+store
 //   GET    /api/broker/trading212/status            → { connected, status, ... }
 //   DELETE /api/broker/trading212                   → delete the connection row
 //
@@ -50,30 +50,39 @@ export interface BrokerDeps {
   onConnected?: (pbUserId: string) => void;
 }
 
-const connectSchema = z.object({ apiKey: z.string().min(1) });
+const connectSchema = z.object({
+  apiKey: z.string().min(1),
+  apiSecret: z.string().min(1),
+});
 
 // --- handlers (deps-injected, HTTP-agnostic) --------------------------------
 
 /**
- * Validate the key BEFORE storing anything. On rejection throw a 400 and persist
- * nothing. On success: AES-encrypt the key, upsert this user's broker_connections
- * row (status connected, account id + currency, last_error cleared), ensure a
- * trading212 account exists, then run the onConnected hook. Returns `{ ok: true }`
- * and NEVER the key.
+ * Validate the credentials BEFORE storing anything. T212 uses HTTP Basic auth
+ * `base64("<public>:<private>")`, and the provider takes the combined
+ * "<public>:<private>" creds string — so we join the two fields with a ':' and
+ * validate/encrypt/store that single combined value.
+ *
+ * On rejection throw a 400 and persist nothing. On success: AES-encrypt the
+ * combined creds, upsert this user's broker_connections row (status connected,
+ * account id + currency, last_error cleared), ensure a trading212 account
+ * exists, then run the onConnected hook. Returns `{ ok: true }` and NEVER the
+ * key.
  */
 export async function connectTrading212With(
   pbUserId: string,
-  input: { apiKey: string },
+  input: { apiKey: string; apiSecret: string },
   deps: BrokerDeps,
 ): Promise<{ ok: true }> {
-  const validation = await deps.provider.validateKey(input.apiKey);
+  const creds = `${input.apiKey}:${input.apiSecret}`;
+  const validation = await deps.provider.validateKey(creds);
   if (!validation.ok) {
     throw new HTTPException(400, {
       res: Response.json({ error: 'invalid_api_key' }, { status: 400 }),
     });
   }
 
-  const apiKeyEnc = deps.encrypt(input.apiKey);
+  const apiKeyEnc = deps.encrypt(creds);
 
   // Upsert the connection (the (user, broker) unique index → at most one row).
   const existing = await deps.connections.getForUser(pbUserId, BROKER);
@@ -169,7 +178,7 @@ export async function disconnectTrading212With(
 // lazily per request while tests pass a fixed deps object. Both paths run the
 // exact same handlers + body validation (no duplication).
 
-function parseConnectBody(body: unknown): { apiKey: string } {
+function parseConnectBody(body: unknown): { apiKey: string; apiSecret: string } {
   const parsed = connectSchema.safeParse(body);
   if (!parsed.success) {
     throw new HTTPException(400, {

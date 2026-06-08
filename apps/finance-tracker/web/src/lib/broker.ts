@@ -36,7 +36,11 @@ export function useBrokerStatus() {
 }
 
 export interface ConnectBrokerInput {
+  /** Trading 212 public (API) key. */
   apiKey: string;
+  /** Trading 212 private (secret) key. The server combines them as
+   *  "<apiKey>:<apiSecret>" for HTTP Basic auth. */
+  apiSecret: string;
 }
 
 /**
