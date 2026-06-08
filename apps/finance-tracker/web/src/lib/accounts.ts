@@ -46,3 +46,23 @@ export function useCreateAccount() {
     },
   });
 }
+
+/**
+ * Delete an account. The PB `account` relation has `cascadeDelete: true`, so the
+ * server auto-removes the account's holdings + transactions — we invalidate
+ * every cache that derives from that data so the whole app reflects the removal.
+ */
+export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.delete<{ ok: true }>("/api/accounts/" + id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
+      void queryClient.invalidateQueries({ queryKey: ["holdings"] });
+      void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      void queryClient.invalidateQueries({ queryKey: ["prices"] });
+      void queryClient.invalidateQueries({ queryKey: ["profiles"] });
+    },
+  });
+}

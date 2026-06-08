@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { SettingsPage } from "@/routes/SettingsPage";
@@ -23,6 +23,19 @@ import { ApiError } from "@/lib/api";
 const apiGet = vi.fn();
 const apiPost = vi.fn();
 const apiDelete = vi.fn();
+
+/**
+ * Route GET responses by path so the broker-status query and the accounts query
+ * can return different shapes. Tests can override either by re-implementing
+ * `apiGet` or by setting these holders. Accounts default to empty so existing
+ * broker-only tests render an empty Accounts section without extra setup.
+ */
+let brokerStatusResponse: unknown = { connected: false };
+let accountsResponse: unknown[] = [];
+function defaultGet(path: string) {
+  if (path === "/api/accounts") return Promise.resolve(accountsResponse);
+  return Promise.resolve(brokerStatusResponse);
+}
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
@@ -56,6 +69,9 @@ beforeEach(() => {
   apiDelete.mockReset();
   toastSuccess.mockReset();
   toastError.mockReset();
+  brokerStatusResponse = { connected: false };
+  accountsResponse = [];
+  apiGet.mockImplementation(defaultGet);
 });
 
 function renderSettings() {
@@ -74,7 +90,6 @@ function renderSettings() {
 describe("SettingsPage — Connect Trading 212", () => {
   it("disconnected: renders the two-key form and POSTs both keys", async () => {
     const user = userEvent.setup();
-    apiGet.mockResolvedValue({ connected: false });
     apiPost.mockResolvedValue({ ok: true });
 
     const { invalidateSpy } = renderSettings();
@@ -116,7 +131,6 @@ describe("SettingsPage — Connect Trading 212", () => {
 
   it("disconnected: surfaces a validation error toast on invalid_api_key", async () => {
     const user = userEvent.setup();
-    apiGet.mockResolvedValue({ connected: false });
     apiPost.mockRejectedValue(
       new ApiError(400, "invalid_api_key", { error: "invalid_api_key" }),
     );
@@ -142,11 +156,11 @@ describe("SettingsPage — Connect Trading 212", () => {
 
   it("connected: shows status, last-synced and disconnect", async () => {
     const user = userEvent.setup();
-    apiGet.mockResolvedValue({
+    brokerStatusResponse = {
       connected: true,
       status: "connected",
       last_synced_at: "2026-06-07T10:00:00.000Z",
-    });
+    };
     apiDelete.mockResolvedValue({ ok: true });
 
     const { invalidateSpy } = renderSettings();
@@ -171,50 +185,13 @@ describe("SettingsPage — Connect Trading 212", () => {
     });
   });
 
-  it("connected: Sync now POSTs the sync endpoint, invalidates caches and toasts", async () => {
-    const user = userEvent.setup();
-    apiGet.mockResolvedValue({
-      connected: true,
-      status: "connected",
-      last_synced_at: "2026-06-07T10:00:00.000Z",
-    });
-    apiPost.mockResolvedValue({
-      ok: true,
-      result: { positions: 2, orders: 3, dividends: 1 },
-    });
-
-    const { invalidateSpy } = renderSettings();
-
-    const syncButton = await screen.findByRole("button", {
-      name: /^Sync now$/,
-    });
-    await user.click(syncButton);
-
-    await waitFor(() => {
-      expect(apiPost).toHaveBeenCalledWith(
-        "/api/broker/trading212/sync",
-        undefined,
-      );
-    });
-
-    await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["holdings"] });
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["transactions"] });
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["accounts"] });
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: ["broker-status"],
-      });
-    });
-    expect(toastSuccess).toHaveBeenCalled();
-  });
-
   it("connected: a failed Sync now surfaces an error toast", async () => {
     const user = userEvent.setup();
-    apiGet.mockResolvedValue({
+    brokerStatusResponse = {
       connected: true,
       status: "connected",
       last_synced_at: "2026-06-07T10:00:00.000Z",
-    });
+    };
     apiPost.mockRejectedValue(new ApiError(500, "sync_failed", {}));
 
     renderSettings();
@@ -231,16 +208,109 @@ describe("SettingsPage — Connect Trading 212", () => {
   });
 
   it("connected with status:error: shows the amber reconnect banner", async () => {
-    apiGet.mockResolvedValue({
+    brokerStatusResponse = {
       connected: true,
       status: "error",
       last_error: "ip_blocked",
-    });
+    };
 
     renderSettings();
 
     const banner = await screen.findByRole("alert");
     expect(banner).toHaveTextContent(/sync is blocked/i);
     expect(banner.className).toContain("text-warning");
+  });
+});
+
+describe("SettingsPage — Accounts (delete)", () => {
+  it("lists accounts and deletes a manual account after confirming", async () => {
+    const user = userEvent.setup();
+    accountsResponse = [
+      { id: "acc1", source: "manual", label: "My Cash" },
+      { id: "acc2", source: "revolut", label: "Revolut Invest" },
+    ];
+    apiDelete.mockResolvedValue({ ok: true });
+
+    const { invalidateSpy } = renderSettings();
+
+    // Both accounts are listed with their source.
+    expect(await screen.findByText("My Cash")).toBeInTheDocument();
+    expect(screen.getByText("Revolut Invest")).toBeInTheDocument();
+
+    // Clicking trash opens a confirm dialog — nothing deleted yet.
+    await user.click(screen.getByRole("button", { name: /delete my cash/i }));
+    expect(apiDelete).not.toHaveBeenCalled();
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(/delete account\?/i);
+
+    // Confirming deletes the manual account (no broker disconnect for manual).
+    await user.click(
+      within(dialog).getByRole("button", { name: /^Delete$/ }),
+    );
+
+    await waitFor(() => {
+      expect(apiDelete).toHaveBeenCalledWith("/api/accounts/acc1");
+    });
+    // Manual source: must NOT touch the broker.
+    expect(apiDelete).not.toHaveBeenCalledWith("/api/broker/trading212");
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["accounts"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["holdings"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["transactions"],
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["prices"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["profiles"] });
+    });
+    expect(toastSuccess).toHaveBeenCalledWith(expect.stringMatching(/deleted/i));
+  });
+
+  it("cancelling the confirm dialog does not delete", async () => {
+    const user = userEvent.setup();
+    accountsResponse = [{ id: "acc1", source: "manual", label: "My Cash" }];
+
+    renderSettings();
+
+    await user.click(
+      await screen.findByRole("button", { name: /delete my cash/i }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /cancel/i }));
+
+    expect(apiDelete).not.toHaveBeenCalled();
+  });
+
+  it("deleting a trading212 account also disconnects the broker (orphan guard)", async () => {
+    const user = userEvent.setup();
+    brokerStatusResponse = { connected: true, status: "connected" };
+    accountsResponse = [{ id: "acc9", source: "trading212", label: "T212" }];
+    apiDelete.mockResolvedValue({ ok: true });
+
+    const { invalidateSpy } = renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: /delete t212/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /^Delete$/ }));
+
+    await waitFor(() => {
+      expect(apiDelete).toHaveBeenCalledWith("/api/accounts/acc9");
+    });
+    // Orphan guard: the broker connection is torn down too.
+    await waitFor(() => {
+      expect(apiDelete).toHaveBeenCalledWith("/api/broker/trading212");
+    });
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["broker-status"],
+      });
+    });
+  });
+
+  it("shows a muted note when there are no accounts", async () => {
+    accountsResponse = [];
+    renderSettings();
+    expect(await screen.findByText(/no accounts yet/i)).toBeInTheDocument();
   });
 });

@@ -1,10 +1,26 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { AlertTriangle, BookOpen, ChevronRight, Link2 } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  ChevronRight,
+  Link2,
+  Trash2,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAccounts, useDeleteAccount } from "@/lib/accounts";
 import { ApiError } from "@/lib/api";
 import {
   useBrokerStatus,
@@ -13,6 +29,7 @@ import {
   useSyncNow,
 } from "@/lib/broker";
 import { formatDate } from "@/lib/format";
+import type { Account } from "@/tiles/types";
 
 /**
  * Settings (M10.4 route `/settings`). Hosts the metrics glossary link and the
@@ -25,6 +42,8 @@ export function SettingsPage() {
       <h1 className="text-xl font-semibold tracking-tight text-fg">Settings</h1>
 
       <ConnectTrading212Card />
+
+      <AccountsCard />
 
       <nav className="overflow-hidden rounded-xl bg-surface shadow-sm">
         <Link
@@ -270,6 +289,142 @@ function ConnectedState({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Human-readable label for an account's data source. */
+const SOURCE_LABELS: Record<Account["source"], string> = {
+  trading212: "Trading 212",
+  revolut: "Revolut",
+  manual: "Manual",
+};
+
+/**
+ * Accounts management card: lists every account with a delete button. Deleting
+ * cascades (holdings + transactions go too) so we gate it behind a confirm
+ * dialog. If the deleted account is a Trading 212 account we ALSO disconnect the
+ * broker, otherwise the `broker_connections` row would orphan-point at a gone
+ * account.
+ */
+function AccountsCard() {
+  const accounts = useAccounts();
+  const deleteAccount = useDeleteAccount();
+  const disconnectBroker = useDisconnectBroker();
+  const [pendingDelete, setPendingDelete] = useState<Account | null>(null);
+
+  function handleConfirmDelete() {
+    const account = pendingDelete;
+    if (!account) return;
+    deleteAccount.mutate(account.id, {
+      onSuccess: () => {
+        // Orphan guard: a deleted T212 account leaves a dangling broker
+        // connection, so tear it down too.
+        if (account.source === "trading212") {
+          disconnectBroker.mutate(undefined, {
+            onError: () =>
+              toast.error(
+                "Account deleted, but couldn't disconnect Trading 212.",
+              ),
+          });
+        }
+        toast.success("Account deleted.");
+        setPendingDelete(null);
+      },
+      onError: () => {
+        toast.error("Couldn't delete the account. Please try again.");
+        setPendingDelete(null);
+      },
+    });
+  }
+
+  return (
+    <section className="space-y-3 rounded-xl bg-surface p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent"
+        >
+          <Wallet className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-medium text-fg">Accounts</h2>
+          <p className="text-xs text-muted">
+            Remove an account and its holdings &amp; transactions.
+          </p>
+        </div>
+      </div>
+
+      {accounts.isPending ? (
+        <Skeleton className="h-10 w-full" />
+      ) : accounts.data && accounts.data.length > 0 ? (
+        <ul className="divide-y divide-border">
+          {accounts.data.map((account) => (
+            <li
+              key={account.id}
+              className="flex items-center justify-between gap-3 py-2"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-fg">
+                  {account.label}
+                </span>
+                <span className="block text-xs text-muted">
+                  {SOURCE_LABELS[account.source]}
+                </span>
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                aria-label={`Delete ${account.label}`}
+                onClick={() => setPendingDelete(account)}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted">No accounts yet.</p>
+      )}
+
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete account?</DialogTitle>
+            <DialogDescription>
+              {pendingDelete
+                ? `"${pendingDelete.label}" and all of its holdings and transactions will be permanently deleted. This can't be undone.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setPendingDelete(null)}
+              disabled={deleteAccount.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deleteAccount.isPending}
+            >
+              {deleteAccount.isPending ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }
 
