@@ -179,6 +179,91 @@ describe('TransactionsRepo', () => {
     expect(aSees.every((t) => t.user === userAId)).toBe(true);
     expect(aSees.find((t) => t.ticker === 'BSECRETTX')).toBeUndefined();
   });
+
+  // Task 2.2 — broker-sync idempotency via the (user, source, external_id)
+  // partial unique index. Exercises the real PocketBase constraint.
+  describe('upsertByExternalId (idempotent sync key)', () => {
+    function syncRow(extId: string, over: Partial<Transaction> = {}) {
+      return {
+        user: userAId,
+        account: accountAId,
+        type: 'buy' as const,
+        ticker: 'EXTID',
+        quantity: 1,
+        price: 100,
+        currency: 'USD',
+        occurred_at: new Date().toISOString(),
+        source: 'trading212' as const,
+        external_id: extId,
+        ...over,
+      };
+    }
+
+    it('upserting twice with the same (user, source, external_id) yields ONE row (updated)', async () => {
+      const extId = `t212-evt-${Date.now()}`;
+      const first = await transactionsRepo.upsertByExternalId(syncRow(extId));
+      const second = await transactionsRepo.upsertByExternalId(
+        syncRow(extId, { quantity: 5 }),
+      );
+
+      // Same row id — updated in place, not duplicated.
+      expect(second.id).toBe(first.id);
+      expect(second.quantity).toBe(5);
+
+      const matches = (await transactionsRepo.list(userAId)).filter(
+        (t) => t.external_id === extId,
+      );
+      expect(matches).toHaveLength(1);
+
+      await transactionsRepo.delete(first.id);
+    });
+
+    it('different external_ids create distinct rows', async () => {
+      const base = `t212-distinct-${Date.now()}`;
+      const a = await transactionsRepo.upsertByExternalId(syncRow(`${base}-1`));
+      const b = await transactionsRepo.upsertByExternalId(syncRow(`${base}-2`));
+
+      expect(a.id).not.toBe(b.id);
+
+      await transactionsRepo.delete(a.id);
+      await transactionsRepo.delete(b.id);
+    });
+
+    it('rows with empty/absent external_id do NOT collide (partial index)', async () => {
+      // Two manual rows with no external_id — the partial index excludes them,
+      // so both must persist without a unique violation.
+      const manualA = await transactionsRepo.create({
+        user: userAId,
+        account: accountAId,
+        type: 'buy',
+        ticker: 'MANUAL1',
+        quantity: 1,
+        price: 1,
+        currency: 'USD',
+        occurred_at: new Date().toISOString(),
+        source: 'manual',
+      });
+      const manualB = await transactionsRepo.create({
+        user: userAId,
+        account: accountAId,
+        type: 'buy',
+        ticker: 'MANUAL2',
+        quantity: 2,
+        price: 2,
+        currency: 'USD',
+        occurred_at: new Date().toISOString(),
+        source: 'manual',
+        external_id: '', // explicit empty — still excluded by the index
+      });
+
+      expect(manualA.id).toBeTruthy();
+      expect(manualB.id).toBeTruthy();
+      expect(manualA.id).not.toBe(manualB.id);
+
+      await transactionsRepo.delete(manualA.id);
+      await transactionsRepo.delete(manualB.id);
+    });
+  });
 });
 
 describe('ImportsRepo', () => {

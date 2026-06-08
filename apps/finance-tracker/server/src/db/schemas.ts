@@ -108,6 +108,9 @@ export const transactionSchema = z.object({
   occurred_at: z.string(),
   source: sourceEnum,
   notes: z.string().optional(),
+  // Broker ledger event id for synced rows (Task 2.2). Empty/absent for manual
+  // rows; backs the (user, source, external_id) partial-unique upsert.
+  external_id: z.string().optional(),
 });
 
 export const transactionCreateSchema = z.object({
@@ -123,6 +126,7 @@ export const transactionCreateSchema = z.object({
   occurred_at: z.string().min(1),
   source: sourceEnum,
   notes: z.string().optional(),
+  external_id: z.string().optional(),
 });
 
 export const transactionUpdateSchema = transactionCreateSchema.partial();
