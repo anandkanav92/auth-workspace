@@ -62,3 +62,32 @@ export async function commitSnapshotReplace(args: {
   const importResult = results[results.length - 1];
   return importResult.body as Import;
 }
+
+/**
+ * Atomically replace a (user, account)'s holdings WITHOUT writing an imports row.
+ *
+ * Used by the Trading 212 sync (Task 2.3): a sync is not a statement import, so
+ * there is no file/hash and no imports audit row — but the same all-or-nothing
+ * guarantee matters. We run the deletes + holding creates as a SINGLE PocketBase
+ * batch transaction, so if any create fails the whole batch rolls back and the
+ * account's prior holdings are preserved (a failed sync never wipes data).
+ *
+ * Only the given account's holdings are touched; the ledger (transactions) is
+ * never part of this batch.
+ */
+export async function commitHoldingsReplace(args: {
+  existing: Deletable[];
+  holdings: HoldingCreate[];
+}): Promise<void> {
+  const pb = await pbAdmin();
+  const batch = pb.createBatch();
+
+  for (const h of args.existing) {
+    batch.collection('holdings').delete(h.id);
+  }
+  for (const row of args.holdings) {
+    batch.collection('holdings').create(row);
+  }
+
+  await batch.send();
+}

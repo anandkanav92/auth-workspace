@@ -55,7 +55,12 @@ export interface LedgerEvent {
   t212Ticker: string;
   isin?: string;
   name?: string;
+  /** Normalised currency for the ledger row (GBX/GBp → GBP, prices already ÷100). */
   currency?: string;
+  /** RAW instrument currency as reported by T212 (e.g. GBX). The sync uses this
+   *  to pence-normalise the portfolio position's cost basis, whose averagePrice
+   *  comes from the (un-normalised) /portfolio endpoint. */
+  rawCurrency?: string;
   quantity?: number;
   price?: number;
   fee?: number;
@@ -241,6 +246,7 @@ export class Trading212Provider implements BrokerProvider {
       isin: order.instrument.isin,
       name: order.instrument.name,
       currency: normalizeCurrencyCode(ccy),
+      rawCurrency: ccy,
       quantity: fill.quantity,
       // GBX/GBp prices are quoted in pence — normalise to GBP major units.
       price: normalizePence(fill.price, ccy).amount,
@@ -266,6 +272,7 @@ export class Trading212Provider implements BrokerProvider {
       isin: d.instrument.isin,
       name: d.instrument.name,
       currency: normalizeCurrencyCode(d.instrument.currency),
+      rawCurrency: d.instrument.currency,
       amount: d.amount,
       amountEur: d.amountInEuro,
       occurredAt: d.paidOn,

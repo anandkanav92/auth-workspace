@@ -157,6 +157,7 @@ describe('Trading212Provider.fetchOrders', () => {
       isin: 'US0378331005',
       name: 'Apple Inc',
       currency: 'USD',
+      rawCurrency: 'USD',
       quantity: 2,
       price: 180.25,
       fee: 0.75,
@@ -170,6 +171,7 @@ describe('Trading212Provider.fetchOrders', () => {
       isin: 'GB00BH4HKS39',
       name: 'Vodafone Group',
       currency: 'GBP', // GBp normalised
+      rawCurrency: 'GBp', // raw instrument currency preserved
       quantity: 100,
       price: 72.5, // 7250 / 100
       fee: 0,
@@ -244,6 +246,7 @@ describe('Trading212Provider.fetchDividends', () => {
       isin: 'US0378331005',
       name: 'Apple Inc',
       currency: 'USD',
+      rawCurrency: 'USD',
       amount: 0.72,
       amountEur: 0.66,
       occurredAt: '2025-03-15T00:00:00.000Z',
