@@ -302,8 +302,8 @@ describe('disconnectTrading212With', () => {
 
 // --- sync-now handler -------------------------------------------------------
 
-describe('syncTrading212With', () => {
-  it('runs the sync for a connected user and returns its result', async () => {
+describe('syncTrading212With (fire-and-forget)', () => {
+  it('kicks off the sync for a connected user and returns started without awaiting it', async () => {
     const fakes = makeFakes();
     await fakes.connectionsRepo.create({
       user: 'u1',
@@ -311,15 +311,40 @@ describe('syncTrading212With', () => {
       api_key_enc: 'x',
       status: 'connected',
     } as Partial<BrokerConnection>);
-    const sync = vi.fn(async () => ({ positions: 2, orders: 3, dividends: 1 }));
+    // A sync that never resolves: if syncTrading212With awaited it, this would
+    // hang. We assert it returns immediately anyway.
+    const sync = vi.fn(() => new Promise<unknown>(() => {}));
     const deps = depsFrom(fakes, okProvider(), { sync });
 
     const result = await syncTrading212With('u1', deps);
     expect(sync).toHaveBeenCalledWith('u1');
-    expect(result).toEqual({ positions: 2, orders: 3, dividends: 1 });
+    expect(result).toEqual({ ok: true, started: true });
   });
 
-  it('404s (and never runs the sync) when the user has no connection', async () => {
+  it('returns started even when the (un-awaited) sync rejects', async () => {
+    const fakes = makeFakes();
+    await fakes.connectionsRepo.create({
+      user: 'u1',
+      broker: 'trading212',
+      api_key_enc: 'x',
+      status: 'connected',
+    } as Partial<BrokerConnection>);
+    const sync = vi.fn(async () => {
+      throw new Error('orders fetch failed (status 500)');
+    });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const deps = depsFrom(fakes, okProvider(), { sync });
+
+    const result = await syncTrading212With('u1', deps);
+    expect(result).toEqual({ ok: true, started: true });
+    // Let the rejected microtask settle so its .catch handler runs.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  it('404s (and never starts the sync) when the user has no connection', async () => {
     const fakes = makeFakes();
     const sync = vi.fn(async () => ({ positions: 0, orders: 0, dividends: 0 }));
     const deps = depsFrom(fakes, okProvider(), { sync });
@@ -432,7 +457,7 @@ describe('broker routes over HTTP (user-scoped)', () => {
     expect(fakes.peek.connections()).toHaveLength(0);
   });
 
-  it('POST /trading212/sync runs the sync for a connected user', async () => {
+  it('POST /trading212/sync kicks off the sync and returns 202 started (fire-and-forget)', async () => {
     const sync = vi.fn(async () => ({ positions: 1, orders: 0, dividends: 0 }));
     const syncDeps = depsFrom(fakes, okProvider(), { sync });
     await connectTrading212With('u1', { apiKey: 'k', apiSecret: 's' }, syncDeps);
@@ -441,15 +466,15 @@ describe('broker routes over HTTP (user-scoped)', () => {
     const res = await app.request('/api/broker/trading212/sync', {
       method: 'POST',
     });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      ok: true,
-      result: { positions: 1, orders: 0, dividends: 0 },
-    });
+    // Fire-and-forget: a full-history sync can exceed Cloudflare's 100s request
+    // timeout, so the endpoint returns immediately and the sync runs in the
+    // background (it records status/last_error on the connection itself).
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true, started: true });
     expect(sync).toHaveBeenCalledWith('u1');
   });
 
-  it('POST /trading212/sync returns a clean 502 sync_failed when the sync throws', async () => {
+  it('POST /trading212/sync still returns 202 even when the un-awaited sync rejects', async () => {
     const sync = vi.fn(async () => {
       throw new Error('orders fetch failed (status 500)');
     });
@@ -460,11 +485,10 @@ describe('broker routes over HTTP (user-scoped)', () => {
     const res = await app.request('/api/broker/trading212/sync', {
       method: 'POST',
     });
-    // A failing sync must surface as a clean 502 — NOT an unhandled raw 500.
-    expect(res.status).toBe(502);
-    const body = await res.json();
-    expect(body).toMatchObject({ error: 'sync_failed' });
-    expect(body.detail).toContain('orders fetch failed');
+    // The rejection is caught + logged (and recorded on the connection as
+    // status=error); it must NOT surface as a 5xx on this endpoint.
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true, started: true });
   });
 
   it('POST /trading212/sync is a 404 when the user has no connection', async () => {

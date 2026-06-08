@@ -184,16 +184,22 @@ export async function disconnectTrading212With(
 /**
  * Trigger a sync for this user's Trading 212 connection ("Sync now", Task 2.4).
  *
+ * FIRE-AND-FORGET: a full-history backfill is rate-limited to 6 req/60s and can
+ * run for minutes — well past Cloudflare's 100s request timeout (524). So we
+ * await ONLY the cheap connection lookup (the 404-when-not-connected guard),
+ * then kick the sync off WITHOUT awaiting and return immediately. The sync
+ * service stamps status='error' + last_error on the connection on failure, so
+ * the UI surfaces it via the status query — the failure must NOT come back on
+ * this request. The client polls the status endpoint for completion.
+ *
  * Guards on the connection FIRST: a user with no connection gets a 404 (and the
- * sync never runs), so this can never sync against a missing/other user's
- * connection. Returns the sync result (counts) on success; the sync itself
- * stamps status=error + last_error on failure and rethrows, which the route's
- * error handler surfaces as a 500 without wiping data.
+ * sync never starts), so this can never sync against a missing/other user's
+ * connection.
  */
 export async function syncTrading212With(
   pbUserId: string,
   deps: BrokerDeps,
-): Promise<unknown> {
+): Promise<{ ok: true; started: true }> {
   const conn = await deps.connections.getForUser(pbUserId, BROKER);
   if (!conn) {
     throw new HTTPException(404, {
@@ -205,7 +211,12 @@ export async function syncTrading212With(
       res: Response.json({ error: 'sync_unavailable' }, { status: 400 }),
     });
   }
-  return deps.sync(pbUserId);
+  // Do NOT await — let the sync run in the background. Swallow + log any failure
+  // here (the sync already records it on the connection for the UI to read).
+  void deps.sync(pbUserId).catch((e) => {
+    console.error('[sync:trading212] failed:', e);
+  });
+  return { ok: true, started: true };
 }
 
 // --- router factory ---------------------------------------------------------
@@ -252,22 +263,16 @@ function buildRouter(resolveDeps: () => BrokerDeps | Promise<BrokerDeps>) {
       return c.json(result);
     })
     .post('/trading212/sync', async (c) => {
-      const deps = await resolveDeps();
-      let result: unknown;
-      try {
-        result = await syncTrading212With(c.var.pbUserId, deps);
-      } catch (err) {
-        // The sync service already stamps status='error' + last_error on the
-        // connection, so the UI banner + toast surface the failure. Translate a
-        // sync failure into a clean 502 instead of leaking a raw 500. (A 404 from
-        // the no-connection guard is an HTTPException and rethrown untouched.)
-        if (err instanceof HTTPException) throw err;
-        const detail = err instanceof Error ? err.message : String(err);
-        throw new HTTPException(502, {
-          res: Response.json({ error: 'sync_failed', detail }, { status: 502 }),
-        });
-      }
-      return c.json({ ok: true, result });
+      // Fire-and-forget: syncTrading212With awaits only the connection lookup
+      // (so a missing connection still 404s), then kicks the sync off in the
+      // background and returns immediately. A long backfill can exceed
+      // Cloudflare's 100s timeout (524), so we MUST NOT await it here. The
+      // client polls GET /trading212/status for completion.
+      const result = await syncTrading212With(
+        c.var.pbUserId,
+        await resolveDeps(),
+      );
+      return c.json(result, 202);
     });
 }
 
