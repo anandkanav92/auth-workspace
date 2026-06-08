@@ -36,6 +36,8 @@ const transactionTypeEnum = z.enum([
 const importStatusEnum = z.enum(['success', 'partial', 'failed']);
 const assetTypeEnum = z.enum(['stock', 'etf', 'other']);
 const dataSourceEnum = z.enum(['yahoo', 'finnhub']);
+const brokerEnum = z.enum(['trading212']);
+const brokerStatusEnum = z.enum(['connected', 'error']);
 
 // =====================================================================
 // Per-user collections
@@ -177,6 +179,37 @@ export const holdingsSnapshotCreateSchema = z.object({
 
 export const holdingsSnapshotUpdateSchema = holdingsSnapshotCreateSchema.partial();
 
+// --- broker_connections -----------------------------------------------------
+// One row per (user, broker). Holds the AES-256-GCM-encrypted read-only API
+// key (`api_key_enc`) plus sync bookkeeping. `status` defaults to "connected"
+// at the app layer; PB stores it as a select. last_synced_at / last_error are
+// set by the sync service.
+export const brokerConnectionSchema = z.object({
+  ...baseRecord,
+  user: z.string(),
+  broker: brokerEnum,
+  api_key_enc: z.string().min(1),
+  t212_account_id: z.string().optional(),
+  currency: z.string().optional(),
+  status: brokerStatusEnum.optional(),
+  last_synced_at: z.string().optional(),
+  last_error: z.string().optional(),
+});
+
+export const brokerConnectionCreateSchema = z.object({
+  user: z.string().min(1),
+  broker: brokerEnum,
+  api_key_enc: z.string().min(1),
+  t212_account_id: z.string().optional(),
+  currency: z.string().optional(),
+  status: brokerStatusEnum.optional(),
+  last_synced_at: z.string().optional(),
+  last_error: z.string().optional(),
+});
+
+export const brokerConnectionUpdateSchema =
+  brokerConnectionCreateSchema.partial();
+
 // =====================================================================
 // Shared collections (read: any authed user; write: superuser only)
 // =====================================================================
@@ -297,3 +330,11 @@ export type PriceCacheUpdate = z.infer<typeof priceCacheUpdateSchema>;
 export type FxRates = z.infer<typeof fxRatesSchema>;
 export type FxRatesCreate = z.infer<typeof fxRatesCreateSchema>;
 export type FxRatesUpdate = z.infer<typeof fxRatesUpdateSchema>;
+
+export type BrokerConnection = z.infer<typeof brokerConnectionSchema>;
+export type BrokerConnectionCreate = z.infer<
+  typeof brokerConnectionCreateSchema
+>;
+export type BrokerConnectionUpdate = z.infer<
+  typeof brokerConnectionUpdateSchema
+>;

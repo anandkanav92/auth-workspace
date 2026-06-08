@@ -16,6 +16,8 @@ import {
   symbolProfileCreateSchema,
   priceCacheCreateSchema,
   fxRatesCreateSchema,
+  brokerConnectionSchema,
+  brokerConnectionCreateSchema,
 } from '../../src/db/schemas';
 
 describe('accountSchema', () => {
@@ -249,6 +251,41 @@ describe('priceCacheCreateSchema', () => {
   it('rejects a missing price', () => {
     expect(() =>
       priceCacheCreateSchema.parse({ ticker: 'AAPL', currency: 'USD' }),
+    ).toThrow();
+  });
+});
+
+describe('brokerConnectionSchema', () => {
+  it('parses a valid persisted broker_connection record', () => {
+    const r = brokerConnectionSchema.parse({
+      id: 'bc1',
+      created: '2026-06-06 00:00:00Z',
+      updated: '2026-06-06 00:00:00Z',
+      user: 'u1',
+      broker: 'trading212',
+      api_key_enc: 'aXY=.dGFn.Y3Q=',
+      status: 'connected',
+    });
+    expect(r.broker).toBe('trading212');
+    expect(r.t212_account_id).toBeUndefined();
+  });
+
+  it('rejects a row missing user', () => {
+    expect(() =>
+      brokerConnectionCreateSchema.parse({
+        broker: 'trading212',
+        api_key_enc: 'aXY=.dGFn.Y3Q=',
+      }),
+    ).toThrow();
+  });
+
+  it('rejects an unknown broker', () => {
+    expect(() =>
+      brokerConnectionCreateSchema.parse({
+        user: 'u1',
+        broker: 'etoro',
+        api_key_enc: 'aXY=.dGFn.Y3Q=',
+      }),
     ).toThrow();
   });
 });
