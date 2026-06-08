@@ -15,6 +15,7 @@ import { importRoutes } from './routes/import';
 import { searchRoutes } from './routes/search';
 import { marketDataRoutes } from './routes/marketData';
 import { portfolioRoutes } from './routes/portfolio';
+import { brokerRoutes } from './routes/broker';
 import { errorHandler } from './middleware/errorHandler';
 
 // Reviewer fix N4: error tracking. No-op locally (init skipped without a DSN).
@@ -42,6 +43,7 @@ app.route('/api/transactions', transactionRoutes);
 app.route('/api/import', importRoutes);
 app.route('/api/search', searchRoutes);
 app.route('/api/portfolio', portfolioRoutes);
+app.route('/api/broker', brokerRoutes);
 // Shared market data (prices / profiles / fx). Routes declare their own
 // /prices, /profiles, /fx subpaths so they mount under the /api prefix. Authed
 // but NOT user-scoped (same model as /api/search).
