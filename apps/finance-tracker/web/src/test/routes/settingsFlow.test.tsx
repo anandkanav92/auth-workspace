@@ -185,7 +185,102 @@ describe("SettingsPage — Connect Trading 212", () => {
     });
   });
 
-  it("connected: a failed Sync now surfaces an error toast", async () => {
+  it("connected: Sync now kicks off (202), polls, then toasts success on completion", async () => {
+    const user = userEvent.setup();
+    // The card's first status fetch sets the baseline (10:00). The very next
+    // status fetch — the poll the sync flow triggers — reports an advanced
+    // timestamp, standing in for the background sync having finished.
+    let syncedAt = "2026-06-07T10:00:00.000Z";
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/api/accounts") return Promise.resolve(accountsResponse);
+      return Promise.resolve({
+        connected: true,
+        status: "connected",
+        last_synced_at: syncedAt,
+      });
+    });
+    // 202 fire-and-forget: returns immediately, sync runs in the background.
+    apiPost.mockImplementation(() => {
+      // Once kicked off, the background sync "completes" — the next poll sees it.
+      syncedAt = "2026-06-07T11:00:00.000Z";
+      return Promise.resolve({ ok: true, started: true });
+    });
+
+    const { invalidateSpy } = renderSettings();
+
+    const syncButton = await screen.findByRole("button", {
+      name: /^Sync now$/,
+    });
+    await user.click(syncButton);
+
+    // Kickoff POSTs the sync endpoint and toasts "Sync started…".
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/broker/trading212/sync",
+        undefined,
+      );
+    });
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith(
+        expect.stringMatching(/sync started/i),
+      ),
+    );
+
+    // The poll picks up the advanced timestamp → stop, invalidate, success toast.
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["holdings"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["transactions"],
+      });
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["accounts"] });
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["broker-status"],
+      });
+    });
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith(
+        expect.stringMatching(/trading 212 synced/i),
+      ),
+    );
+    // Polling stopped → button returns to "Sync now".
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /^Sync now$/ }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("connected: a sync that errors server-side surfaces the error toast", async () => {
+    const user = userEvent.setup();
+    let statusValue: Record<string, unknown> = {
+      connected: true,
+      status: "connected",
+      last_synced_at: "2026-06-07T10:00:00.000Z",
+    };
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/api/accounts") return Promise.resolve(accountsResponse);
+      return Promise.resolve(statusValue);
+    });
+    apiPost.mockImplementation(() => {
+      // Background sync fails: the next poll reports an error.
+      statusValue = { connected: true, status: "error", last_error: "ip_blocked" };
+      return Promise.resolve({ ok: true, started: true });
+    });
+
+    renderSettings();
+
+    await user.click(
+      await screen.findByRole("button", { name: /^Sync now$/ }),
+    );
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        expect.stringMatching(/ip_blocked/i),
+      ),
+    );
+  });
+
+  it("connected: a failed Sync now kickoff surfaces an error toast", async () => {
     const user = userEvent.setup();
     brokerStatusResponse = {
       connected: true,

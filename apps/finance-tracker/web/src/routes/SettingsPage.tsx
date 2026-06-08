@@ -230,14 +230,6 @@ function ConnectedState({
     });
   }
 
-  function handleSyncNow() {
-    syncNow.mutate(undefined, {
-      onSuccess: () => toast.success("Trading 212 synced."),
-      onError: () =>
-        toast.error("Sync failed — check your connection and try again."),
-    });
-  }
-
   return (
     <div className="space-y-3">
       {syncStatus === "error" && (
@@ -272,10 +264,10 @@ function ConnectedState({
         <Button
           type="button"
           size="sm"
-          onClick={handleSyncNow}
-          disabled={syncNow.isPending}
+          onClick={syncNow.start}
+          disabled={syncNow.isSyncing}
         >
-          {syncNow.isPending ? "Syncing…" : "Sync now"}
+          {syncNow.isSyncing ? "Syncing…" : "Sync now"}
         </Button>
 
         <Button
