@@ -1,14 +1,29 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { BookOpen, ChevronRight } from "lucide-react";
+import { AlertTriangle, BookOpen, ChevronRight, Link2 } from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError } from "@/lib/api";
+import {
+  useBrokerStatus,
+  useConnectBroker,
+  useDisconnectBroker,
+} from "@/lib/broker";
+import { formatDate } from "@/lib/format";
 
 /**
- * Settings (M10.4 route `/settings`). Most settings (accounts, preferences, data
- * export) are still to come; for now it hosts the link into the metrics glossary.
+ * Settings (M10.4 route `/settings`). Hosts the metrics glossary link and the
+ * Trading 212 connection card (Task 1.6). Most other settings (preferences,
+ * data export) are still to come.
  */
 export function SettingsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold tracking-tight text-fg">Settings</h1>
+
+      <ConnectTrading212Card />
 
       <nav className="overflow-hidden rounded-xl bg-surface shadow-sm">
         <Link
@@ -34,8 +49,191 @@ export function SettingsPage() {
       </nav>
 
       <p className="px-1 text-sm text-muted">
-        More settings (accounts, preferences, data export) coming soon.
+        More settings (preferences, data export) coming soon.
       </p>
     </div>
+  );
+}
+
+/** The Trading 212 connection card: disconnected form ↔ connected status. */
+function ConnectTrading212Card() {
+  const status = useBrokerStatus();
+
+  return (
+    <section className="space-y-3 rounded-xl bg-surface p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent"
+        >
+          <Link2 className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-medium text-fg">Connect Trading 212</h2>
+          <p className="text-xs text-muted">
+            Sync your holdings and history automatically.
+          </p>
+        </div>
+      </div>
+
+      {status.isPending ? (
+        <CardLoading />
+      ) : status.data?.connected ? (
+        <ConnectedState
+          syncStatus={status.data.status}
+          lastSyncedAt={status.data.last_synced_at}
+        />
+      ) : (
+        <DisconnectedState />
+      )}
+    </section>
+  );
+}
+
+function CardLoading() {
+  return (
+    <div className="space-y-2" aria-label="Loading connection status">
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-9 w-28" />
+    </div>
+  );
+}
+
+function DisconnectedState() {
+  const [apiKey, setApiKey] = useState("");
+  const connect = useConnectBroker();
+
+  function handleConnect() {
+    const trimmed = apiKey.trim();
+    if (!trimmed) return;
+    connect.mutate(
+      { apiKey: trimmed },
+      {
+        onSuccess: () => {
+          setApiKey("");
+          toast.success("Trading 212 connected.");
+        },
+        onError: (err) => {
+          const code =
+            err instanceof ApiError && isInvalidKey(err)
+              ? "That API key was rejected — check it's a valid read-only key."
+              : "Couldn't connect to Trading 212. Please try again.";
+          toast.error(code);
+        },
+      },
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <label
+          htmlFor="t212-api-key"
+          className="block text-xs font-medium text-fg"
+        >
+          API key
+        </label>
+        <input
+          id="t212-api-key"
+          type="password"
+          autoComplete="off"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder="Paste your read-only key"
+          className="h-10 w-full rounded-md border border-border bg-bg px-3 text-sm text-fg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </div>
+
+      <p className="text-xs text-muted">
+        Use a <strong className="font-medium text-fg">read-only</strong> key
+        (account/portfolio/history scopes; no order placement). Restrict it to IP{" "}
+        <code className="rounded bg-muted/10 px-1 py-0.5 font-mono text-[11px] text-fg">
+          77.173.30.177
+        </code>
+        .{" "}
+        <Link to="/learn" className="text-accent underline-offset-2 hover:underline">
+          What's this?
+        </Link>
+      </p>
+
+      <Button
+        type="button"
+        size="sm"
+        onClick={handleConnect}
+        disabled={!apiKey.trim() || connect.isPending}
+      >
+        {connect.isPending ? "Connecting…" : "Connect"}
+      </Button>
+    </div>
+  );
+}
+
+function ConnectedState({
+  syncStatus,
+  lastSyncedAt,
+}: {
+  syncStatus?: "connected" | "error";
+  lastSyncedAt?: string;
+}) {
+  const disconnect = useDisconnectBroker();
+
+  function handleDisconnect() {
+    disconnect.mutate(undefined, {
+      onSuccess: () => toast.success("Trading 212 disconnected."),
+      onError: () => toast.error("Couldn't disconnect. Please try again."),
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      {syncStatus === "error" && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md bg-warning/10 px-3 py-2 text-xs text-warning"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <span>
+            Trading 212 sync is blocked — your key or its IP allowlist may need
+            updating. Reconnect with a fresh read-only key.
+          </span>
+        </div>
+      )}
+
+      <dl className="space-y-1 text-sm">
+        <div className="flex items-center justify-between">
+          <dt className="text-muted">Status</dt>
+          <dd className="font-medium text-fg">
+            {syncStatus === "error" ? "Needs attention" : "Connected"}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between">
+          <dt className="text-muted">Last synced</dt>
+          <dd className="font-medium text-fg">
+            {lastSyncedAt ? formatDate(new Date(lastSyncedAt)) : "Never"}
+          </dd>
+        </div>
+      </dl>
+
+      {/* TODO(M2.4): Sync now button — wired once the sync endpoint lands. */}
+
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={handleDisconnect}
+        disabled={disconnect.isPending}
+      >
+        {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
+      </Button>
+    </div>
+  );
+}
+
+/** A connect failure carrying the server's `invalid_api_key` error code. */
+function isInvalidKey(err: ApiError): boolean {
+  return (
+    typeof err.body === "object" &&
+    err.body !== null &&
+    (err.body as { error?: unknown }).error === "invalid_api_key"
   );
 }
