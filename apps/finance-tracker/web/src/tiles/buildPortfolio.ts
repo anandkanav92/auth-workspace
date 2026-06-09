@@ -38,8 +38,14 @@ export function hasCostBasis(holding: Holding): boolean {
   );
 }
 
-/** Multiplier converting one unit of `currency` into EUR. Defaults to 1. */
-function fxToEur(currency: string, fx: FxRates): number {
+/**
+ * Multiplier converting one unit of `currency` into EUR. Defaults to 1.
+ *
+ * Exported so per-position detail math (positionDetailMath.ts) converts trade
+ * prices / dividend cash with the IDENTICAL pence/GBX-safe logic as the holdings
+ * join — there must be exactly one place this rule lives.
+ */
+export function fxToEur(currency: string, fx: FxRates): number {
   if (!currency || currency === "EUR") return 1;
   // Defensive pence handling: the server normalises GBp/GBX → GBP before it ever
   // reaches us, but if a pence-quoted price slips through, treat it as GBP ÷ 100
