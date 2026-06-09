@@ -68,6 +68,9 @@ const DEFAULT_LIMIT = 100;
 // scoped to one ticker, rather than the global newest-100 (which could omit a
 // ticker's older trades and skew the math).
 const TICKER_LIMIT = 200;
+// The server's hard cap per page. Portfolio-wide realised P&L + actual dividends
+// (M6) need the COMPLETE ledger across all tickers, so we ask for this max.
+const SERVER_MAX_LIMIT = 200;
 
 /** Feed query options: a type scope and/or a single-ticker scope (both server-side). */
 export interface ActivityQuery {
@@ -92,6 +95,28 @@ export function useActivity(opts: ActivityFilter | ActivityQuery = "all") {
       });
       if (type !== "all") params.set("type", type);
       if (ticker) params.set("ticker", ticker);
+      const page = await api.get<TransactionsPage>(
+        `/api/transactions?${params.toString()}`,
+      );
+      return page.items;
+    },
+  });
+}
+
+/**
+ * Fetch the COMPLETE ledger (all tickers, all types) for portfolio-wide math —
+ * realised P&L + actual trailing-12m dividends (M6), which are only correct on
+ * the full history, not the newest-100 the feed defaults to.
+ *
+ * We request the server's max page size (200). NOTE: ledgers larger than 200
+ * rows would be truncated — pagination (loop pages, or an `?all` server flag) is
+ * the follow-up; 200 covers expected users for now.
+ */
+export function useFullLedger() {
+  return useQuery({
+    queryKey: [...ACTIVITY_KEY, "full", SERVER_MAX_LIMIT],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: String(SERVER_MAX_LIMIT) });
       const page = await api.get<TransactionsPage>(
         `/api/transactions?${params.toString()}`,
       );
