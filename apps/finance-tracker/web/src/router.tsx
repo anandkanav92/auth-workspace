@@ -11,6 +11,7 @@ import { LayoutPreview } from "@/dev/LayoutPreview";
 import { TilesPreview } from "@/dev/TilesPreview";
 import { AccountHoldingsPage } from "@/routes/AccountHoldingsPage";
 import { AccountPage } from "@/routes/AccountPage";
+import { ActivityPage } from "@/routes/ActivityPage";
 import { ImportPage } from "@/routes/ImportPage";
 import { LearnPage } from "@/routes/LearnPage";
 import { PortfolioPage } from "@/routes/PortfolioPage";
@@ -27,7 +28,8 @@ import { SettingsPage } from "@/routes/SettingsPage";
  *   │   ├─ /account/$id
  *   │   ├─ /account/$id/holdings
  *   │   ├─ /settings
- *   │   └─ /import
+ *   │   ├─ /import
+ *   │   └─ /activity
  *   ├─ /dev/layout  (standalone visual-QA surface; NOT inside the shell)
  *   └─ /dev/tiles   (standalone analytics-tile gallery; fixture data, no BFF)
  */
@@ -95,6 +97,12 @@ const learnRoute = createRoute({
   component: LearnPage,
 });
 
+const activityRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/activity",
+  component: ActivityPage,
+});
+
 // Dev-only visual QA surface. Lives outside the AppLayout shell on purpose — it
 // renders its own forced light/dark panels.
 const devLayoutRoute = createRoute({
@@ -120,6 +128,7 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
     importRoute,
     learnRoute,
+    activityRoute,
   ]),
   devLayoutRoute,
   devTilesRoute,

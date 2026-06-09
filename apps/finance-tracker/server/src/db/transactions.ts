@@ -18,19 +18,47 @@ export class TransactionsRepo extends PerUserRepo<
   }
 
   /**
-   * Paged transaction list for this user, newest first, optionally scoped to
-   * one account. Returns PocketBase's ListResult so the route can echo
+   * Paged transaction list for this user, newest first (-occurred_at),
+   * optionally scoped by account, type (buy/sell/dividend/...), and/or ticker.
+   * Returns PocketBase's ListResult so the route can echo
    * page/perPage/totalItems/totalPages.
+   *
+   * All filter values are bound via PocketBase's PARAMETERIZED filter (see
+   * listPagedWhere) — never string interpolation — so caller-supplied values
+   * cannot break out of the `user = {:userId}` scope.
    */
   async listPaged(
     pbUserId: string,
-    opts: { page?: number; perPage?: number; account?: string } = {},
+    opts: {
+      page?: number;
+      perPage?: number;
+      account?: string;
+      type?: string;
+      ticker?: string;
+    } = {},
   ): Promise<ListResult<Transaction>> {
     const page = opts.page ?? 1;
     const perPage = opts.perPage ?? 50;
-    const extra = opts.account
-      ? { fragment: 'account = {:account}', params: { account: opts.account } }
-      : undefined;
+
+    const clauses: string[] = [];
+    const params: Record<string, unknown> = {};
+    if (opts.account) {
+      clauses.push('account = {:account}');
+      params.account = opts.account;
+    }
+    if (opts.type) {
+      clauses.push('type = {:type}');
+      params.type = opts.type;
+    }
+    if (opts.ticker) {
+      clauses.push('ticker = {:ticker}');
+      params.ticker = opts.ticker;
+    }
+    const extra =
+      clauses.length > 0
+        ? { fragment: clauses.join(' && '), params }
+        : undefined;
+
     return this.listPagedWhere(pbUserId, page, perPage, extra, '-occurred_at');
   }
 

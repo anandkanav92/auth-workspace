@@ -22,18 +22,19 @@ import { useIsMobile } from "@/lib/useIsMobile";
  *
  * M13: the "Search" tab no longer navigates — it opens the full-screen search
  * overlay (M13.5). The same search palette is also reachable globally via
- * Cmd/Ctrl-K (M13.1), rendered here as a centred command dialog. Activity still
- * maps to the nearest shipped surface (/import) until it has its own route.
+ * Cmd/Ctrl-K (M13.1), rendered here as a centred command dialog. M4: the
+ * Activity tab now has its own route (/activity) — the chronological ledger
+ * feed — instead of falling back to /import.
  */
 const TAB_TO_PATH: Record<Exclude<BottomTabId, "search">, string> = {
   portfolio: "/portfolio",
-  activity: "/import",
+  activity: "/activity",
   settings: "/settings",
 };
 
 function activeTabForPath(pathname: string): BottomTabId {
   if (pathname.startsWith("/settings")) return "settings";
-  if (pathname.startsWith("/import")) return "activity";
+  if (pathname.startsWith("/activity")) return "activity";
   // /portfolio and /account/* both belong under the portfolio destination.
   return "portfolio";
 }
