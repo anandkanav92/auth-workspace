@@ -98,12 +98,58 @@ const PROFILES = [
 
 const FX = { rates: {} };
 
+// M5.2 — ledger for the detail sheet. AAPL has a buy/buy/sell + dividend so the
+// sheet can show realised P&L, dividends, and a trade history; MSFT/TSLA have none.
+const TRANSACTIONS = [
+  {
+    id: "t1",
+    account: "acc-1",
+    type: "buy",
+    ticker: "AAPL",
+    quantity: 10,
+    price: 100,
+    currency: "EUR",
+    occurred_at: "2026-01-01T00:00:00Z",
+    source: "trading212",
+  },
+  {
+    id: "t2",
+    account: "acc-1",
+    type: "sell",
+    ticker: "AAPL",
+    quantity: 5,
+    price: 200,
+    currency: "EUR",
+    occurred_at: "2026-03-01T00:00:00Z",
+    source: "trading212",
+  },
+  {
+    id: "t3",
+    account: "acc-1",
+    type: "dividend",
+    ticker: "AAPL",
+    quantity: 0,
+    price: 12,
+    currency: "EUR",
+    occurred_at: "2026-04-01T00:00:00Z",
+    source: "trading212",
+  },
+];
+
 function getImpl(path: string) {
   if (path === "/api/holdings") return Promise.resolve(HOLDINGS);
   if (path === "/api/accounts") return Promise.resolve(ACCOUNTS);
   if (path === "/api/prices") return Promise.resolve(PRICES);
   if (path === "/api/profiles") return Promise.resolve(PROFILES);
   if (path === "/api/fx") return Promise.resolve(FX);
+  if (path.startsWith("/api/transactions"))
+    return Promise.resolve({
+      items: TRANSACTIONS,
+      page: 1,
+      perPage: 100,
+      totalItems: TRANSACTIONS.length,
+      totalPages: 1,
+    });
   throw new Error(`unexpected GET ${path}`);
 }
 
@@ -148,6 +194,43 @@ describe("HoldingsList", () => {
     const tsla = await screen.findByRole("button", { name: /TSLA Tesla/ });
     expect(within(tsla).getByText(/800,00/)).toBeInTheDocument();
     expect(within(tsla).getByText("—")).toBeInTheDocument();
+  });
+
+  it("detail sheet shows trade history, realised P&L and dividends from the ledger", async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(
+      await screen.findByRole("button", { name: /AAPL Apple Inc\./ }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "AAPL" });
+
+    // Realised P&L: avg cost 100, sell 5 @ 200 → +500.
+    const realisedLabel = await within(dialog).findByText("Realised P&L");
+    const realisedCell = realisedLabel.closest("div");
+    expect(
+      within(realisedCell as HTMLElement).getByText(/\+.*500,00/),
+    ).toBeInTheDocument();
+    // Dividends: 12.
+    expect(within(dialog).getByText("Dividends received")).toBeInTheDocument();
+    // Trade history present (a Buy and a Sell row).
+    const history = within(dialog).getByText("Trade history").closest("div");
+    expect(history).not.toBeNull();
+    expect(within(history as HTMLElement).getByText("Buy")).toBeInTheDocument();
+    expect(within(history as HTMLElement).getByText("Sell")).toBeInTheDocument();
+  });
+
+  it("detail sheet shows the no-history note for a position with no ledger rows", async () => {
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(await screen.findByRole("button", { name: /TSLA Tesla/ }));
+    const dialog = await screen.findByRole("dialog", { name: "TSLA" });
+
+    expect(
+      await within(dialog).findByText(/no transaction history/i),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText("Trade history")).not.toBeInTheDocument();
   });
 
   it("partial sell posts the exact body, decrements optimistically, invalidates", async () => {

@@ -7,10 +7,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { HOLDINGS_KEY } from "@/lib/holdings";
 import { usePortfolioData } from "@/tiles/usePortfolioData";
+import {
+  filterHoldings,
+  sortHoldings,
+  type HoldingsFilter,
+  type SortKey,
+} from "@/tiles/holdingsSort";
 import type { Holding, Position } from "@/tiles/types";
 
 import { PositionRow } from "./PositionRow";
 import { PositionSheet } from "./PositionSheet";
+
+/** Sort options shown in the control; default is the first (Value desc). */
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "value", label: "Value" },
+  { key: "pnlEur", label: "P&L €" },
+  { key: "pnlPct", label: "P&L %" },
+  { key: "name", label: "Name" },
+  { key: "weight", label: "Weight" },
+];
 
 /**
  * M14.1 / 14.2 / 14.5 — flat holdings list for one account.
@@ -37,6 +52,9 @@ import { PositionSheet } from "./PositionSheet";
 const VIRTUALIZE_THRESHOLD = 50;
 const ROW_HEIGHT = 64;
 
+const controlClass =
+  "h-8 rounded-md border border-border bg-surface px-2 text-xs text-fg outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 export function HoldingsList({ accountId }: { accountId: string }) {
   const accountIds = useMemo(() => [accountId], [accountId]);
   const { data, isLoading, isError } = usePortfolioData(accountIds);
@@ -56,14 +74,41 @@ export function HoldingsList({ accountId }: { accountId: string }) {
   const [selected, setSelected] = useState<Position | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // M5.3 — sort + filter controls. Default sort is Value descending.
+  const [sortKey, setSortKey] = useState<SortKey>("value");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [filter, setFilter] = useState<HoldingsFilter>({});
+
   const positions = data?.positions ?? [];
   const totalValue = data?.totalValueEur ?? 0;
 
   const openPositions = positions.filter((p) => p.quantity > 0);
   const closedPositions = positions.filter((p) => p.quantity <= 0);
-  const visible = showClosed
+
+  // Distinct filter options drawn from the positions currently in scope.
+  const assetTypes = useMemo(
+    () => Array.from(new Set(openPositions.map((p) => p.assetType))).sort(),
+    [openPositions],
+  );
+  const sectors = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          openPositions
+            .map((p) => p.sector)
+            .filter((s): s is string => Boolean(s)),
+        ),
+      ).sort(),
+    [openPositions],
+  );
+
+  const base = showClosed
     ? [...openPositions, ...closedPositions]
     : openPositions;
+  const visible = useMemo(
+    () => sortHoldings(filterHoldings(base, filter), sortKey, sortDir),
+    [base, filter, sortKey, sortDir],
+  );
 
   function handleSelect(position: Position) {
     setSelected(position);
@@ -114,6 +159,69 @@ export function HoldingsList({ accountId }: { accountId: string }) {
             />
             Show closed ({closedPositions.length})
           </label>
+        ) : null}
+      </div>
+
+      {/* M5.3 — sort + filter controls (compact, mobile-friendly). */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          <span className="sr-only sm:not-sr-only">Sort</span>
+          <select
+            aria-label="Sort by"
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className={controlClass}
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          aria-label={`Sort direction: ${sortDir === "desc" ? "descending" : "ascending"}`}
+          onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
+          className="h-8 rounded-md border border-border bg-surface px-2 text-xs text-fg"
+        >
+          {sortDir === "desc" ? "↓" : "↑"}
+        </button>
+
+        {assetTypes.length > 1 ? (
+          <select
+            aria-label="Filter by asset type"
+            value={filter.assetType ?? "all"}
+            onChange={(e) =>
+              setFilter((f) => ({ ...f, assetType: e.target.value }))
+            }
+            className={controlClass}
+          >
+            <option value="all">All types</option>
+            {assetTypes.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
+        {sectors.length > 1 ? (
+          <select
+            aria-label="Filter by sector"
+            value={filter.sector ?? "all"}
+            onChange={(e) =>
+              setFilter((f) => ({ ...f, sector: e.target.value }))
+            }
+            className={controlClass}
+          >
+            <option value="all">All sectors</option>
+            {sectors.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
         ) : null}
       </div>
 

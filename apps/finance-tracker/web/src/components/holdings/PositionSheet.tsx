@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { api } from "@/lib/api";
+import { useActivity } from "@/lib/activity";
 import {
   buildSellUndoBody,
   useAdjustHolding,
@@ -17,9 +20,10 @@ import {
   useUndoSell,
   type AdjustBody,
 } from "@/lib/holdings";
-import { formatEur, formatPct, formatQty } from "@/lib/format";
+import { formatDate, formatEur, formatPct, formatQty } from "@/lib/format";
 import { haptic } from "@/lib/haptics";
-import type { Holding, Position } from "@/tiles/types";
+import { computePositionDetail } from "@/tiles/positionDetailMath";
+import type { FxRates, Holding, Position } from "@/tiles/types";
 
 /**
  * M14.3 / M14.4 — bottom sheet for a single position.
@@ -29,6 +33,14 @@ import type { Holding, Position } from "@/tiles/types";
  *   - `edit`   : adjust quantity / total cost → PATCH /api/holdings/:id.
  *   - `sell`   : partial sell (qty + price + currency) → POST /api/holdings/:id/sell.
  * "Sell all" is the full-sell DELETE /api/holdings/:id with a sale price.
+ *
+ * M5.2 — the detail view also surfaces per-position history derived from the
+ * ledger (`useActivity`, filtered to this ticker): the trade history (the prices
+ * bought/sold at, over time), average-cost REALISED P&L, dividends received, and
+ * the holding period. Computed by the pure {@link computePositionDetail}. When
+ * the ledger has no rows for this ticker (Revolut / manual positions imported
+ * without a transaction history), only the live unrealised figures show, with a
+ * small note in place of the realised/dividends/trade-history block.
  *
  * The sheet renders off the joined {@link Position} (EUR values, name, P&L), but
  * the mutations need the RAW {@link Holding} (account, ticker, cost in
@@ -149,21 +161,52 @@ function DetailView({
     );
   }
 
+  // M5.2 — this ticker's ledger drives the trade history + realised/dividends.
+  const { data: ledgerAll = [], isLoading: ledgerLoading } = useActivity();
+  const ledger = useMemo(
+    () => ledgerAll.filter((t) => t.ticker === position.ticker),
+    [ledgerAll, position.ticker],
+  );
+
+  // FX is read from the cache usePortfolioData already populated; absent → no
+  // conversion (rate-1 default in fxToEur), so the sheet still renders.
+  const { data: fx } = useQuery({
+    queryKey: ["fx"],
+    queryFn: () => api.get<FxRates | null>("/api/fx"),
+    staleTime: 60 * 60_000,
+  });
+
+  const detail = useMemo(
+    () =>
+      computePositionDetail({
+        position,
+        ledger,
+        fx: fx ?? { rates: {} },
+      }),
+    [position, ledger, fx],
+  );
+
+  const hasHistory = ledger.length > 0;
+  const avgCostEur =
+    position.hasCost && position.costEur !== null && position.quantity > 0
+      ? position.costEur / position.quantity
+      : null;
+
   return (
     <div className="mt-4 space-y-4">
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
         <Detail label="Quantity" value={formatQty(position.quantity)} />
-        <Detail label="Value" value={formatEur(position.valueEur)} />
         <Detail
-          label="Cost"
-          value={
-            position.hasCost && position.costEur !== null
-              ? formatEur(position.costEur)
-              : "—"
-          }
+          label="Live price"
+          value={`${formatQty(position.price)} ${position.priceCurrency}`}
+        />
+        <Detail label="Market value" value={formatEur(position.valueEur)} />
+        <Detail
+          label="Avg cost (EUR)"
+          value={avgCostEur !== null ? formatEur(avgCostEur) : "—"}
         />
         <Detail
-          label="P&L"
+          label="Unrealised P&L"
           value={
             position.hasCost && position.returnEur !== null
               ? `${position.returnEur >= 0 ? "+" : ""}${formatEur(
@@ -183,7 +226,43 @@ function DetailView({
                 : "danger"
           }
         />
+        {detail.holdingSince ? (
+          <Detail
+            label="Held since"
+            value={formatDate(new Date(detail.holdingSince))}
+          />
+        ) : null}
       </dl>
+
+      {/* M5.2 realised P&L + dividends — only when the ledger has cost-bearing data. */}
+      {hasHistory ? (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-4 text-sm">
+          {detail.realisedEur !== 0 ? (
+            <Detail
+              label="Realised P&L"
+              value={`${detail.realisedEur >= 0 ? "+" : ""}${formatEur(
+                detail.realisedEur,
+              )}`}
+              tone={detail.realisedEur >= 0 ? "success" : "danger"}
+            />
+          ) : null}
+          {detail.dividendsEur > 0 ? (
+            <Detail
+              label="Dividends received"
+              value={formatEur(detail.dividendsEur)}
+            />
+          ) : null}
+        </dl>
+      ) : null}
+
+      {/* M5.2 trade history. */}
+      {hasHistory ? (
+        <TradeHistory trades={detail.trades} />
+      ) : ledgerLoading ? null : (
+        <p className="rounded-lg border border-border px-3 py-2 text-xs text-muted">
+          No transaction history for this position.
+        </p>
+      )}
 
       {!confirmFull ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -258,6 +337,46 @@ function DetailView({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** M5.2 — the per-position buy/sell history (date · side · qty · price). */
+function TradeHistory({
+  trades,
+}: {
+  trades: ReturnType<typeof computePositionDetail>["trades"];
+}) {
+  if (trades.length === 0) return null;
+  // Newest first reads more naturally in a compact list.
+  const rows = [...trades].reverse();
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted">Trade history</p>
+      <ul className="max-h-48 divide-y divide-border overflow-auto rounded-lg border border-border">
+        {rows.map((t, i) => (
+          <li
+            key={`${t.date}-${i}`}
+            className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+          >
+            <span className="text-muted tabular-nums">
+              {formatDate(new Date(t.date))}
+            </span>
+            <span
+              className={
+                t.side === "buy"
+                  ? "font-medium text-success"
+                  : "font-medium text-danger"
+              }
+            >
+              {t.side === "buy" ? "Buy" : "Sell"}
+            </span>
+            <span className="ml-auto text-fg tabular-nums">
+              {formatQty(t.quantity)} @ {formatQty(t.price)} {t.currency}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
