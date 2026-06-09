@@ -167,4 +167,35 @@ describe('FxRatesRepo', () => {
     const all = await fxRatesRepo.list();
     expect(all.filter((r) => r.id === created.id)).toHaveLength(1);
   });
+
+  // REGRESSION (prod bug): the refreshFx cron upserts with a DATE-ONLY key
+  // ('YYYY-MM-DD'), but fx_rates.date is a PB DateField stored as a full
+  // datetime ('YYYY-MM-DD 00:00:00.000Z'). An exact `date = 'YYYY-MM-DD'` find
+  // never matched the stored datetime, so the same-day re-run fell through to
+  // CREATE and the unique `date` index rejected it (ClientResponseError 400).
+  // The fix must make a same-day re-run UPDATE the existing row instead.
+  it('same-day re-run with a DATE-ONLY key UPDATES the row (no 400 dup-create)', async () => {
+    const dayKey = '2026-07-15'; // date-only, exactly what amsterdamDate() yields
+
+    const created = await fxRatesRepo.upsert({
+      date: dayKey,
+      rates: { EUR: 1, USD: 1.1 },
+    });
+    expect(created.id).toBeTruthy();
+
+    // Second upsert for the SAME calendar day must find + UPDATE the stored
+    // datetime row, not 400 on the unique index.
+    const updated = await fxRatesRepo.upsert({
+      date: dayKey,
+      rates: { EUR: 1, USD: 1.12, CHF: 0.97 },
+    });
+    expect(updated.id).toBe(created.id); // same row, updated
+    expect(updated.rates.USD).toBe(1.12);
+    expect(updated.rates.CHF).toBe(0.97);
+
+    // Exactly one row exists for that calendar day.
+    const all = await fxRatesRepo.list();
+    const sameDay = all.filter((r) => r.date.slice(0, 10) === dayKey);
+    expect(sameDay).toHaveLength(1);
+  });
 });

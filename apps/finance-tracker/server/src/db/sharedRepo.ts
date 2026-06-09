@@ -35,6 +35,16 @@ export class SharedRepo<
 
   /** Fetch the single row whose key field equals `key`, or null if absent. */
   async get(key: string): Promise<TRecord | null> {
+    return this.findByKey(key);
+  }
+
+  /**
+   * Find the existing row matching the natural key, or null. Exact equality on
+   * the key field — correct for TEXT keys (ticker). Subclasses whose key is a PB
+   * DateField (stored as a full datetime, so `field = 'YYYY-MM-DD'` never
+   * matches) override this with a date-aware match. See FxRatesRepo.
+   */
+  protected async findByKey(key: string): Promise<TRecord | null> {
     const pb = await this.pb();
     const filter = pb.filter(`${this.keyField} = {:key}`, { key });
     return pb
@@ -61,11 +71,7 @@ export class SharedRepo<
       );
     }
     const pb = await this.pb();
-    const filter = pb.filter(`${this.keyField} = {:key}`, { key });
-    const existing = await pb
-      .collection(this.collection)
-      .getFirstListItem<TRecord>(filter)
-      .catch(() => null);
+    const existing = await this.findByKey(key);
 
     if (existing) {
       return pb.collection(this.collection).update<TRecord>(existing.id, data);
