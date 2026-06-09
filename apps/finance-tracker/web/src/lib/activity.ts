@@ -63,17 +63,35 @@ export type ActivityFilter = "all" | "buy" | "sell" | "dividend";
 export const ACTIVITY_KEY = ["transactions"] as const;
 
 const DEFAULT_LIMIT = 100;
+// A single ticker's full history is what the position detail needs for a CORRECT
+// average-cost / realised P&L — so we fetch up to the server cap (200) when
+// scoped to one ticker, rather than the global newest-100 (which could omit a
+// ticker's older trades and skew the math).
+const TICKER_LIMIT = 200;
+
+/** Feed query options: a type scope and/or a single-ticker scope (both server-side). */
+export interface ActivityQuery {
+  type?: ActivityFilter;
+  ticker?: string;
+}
 
 /**
- * Fetch the signed-in user's transaction ledger, newest first. Pass a `filter`
- * to scope to one type server-side; "all" (default) fetches every type.
+ * Fetch the signed-in user's transaction ledger, newest first. Pass a type
+ * filter (string) and/or `{ ticker }` to scope server-side; defaults to every
+ * type across all tickers. When a `ticker` is given we pull its full history so
+ * per-position P&L is computed on the complete ledger, not a truncated page.
  */
-export function useActivity(filter: ActivityFilter = "all") {
+export function useActivity(opts: ActivityFilter | ActivityQuery = "all") {
+  const { type = "all", ticker } =
+    typeof opts === "string" ? { type: opts, ticker: undefined } : opts;
   return useQuery({
-    queryKey: [...ACTIVITY_KEY, filter],
+    queryKey: [...ACTIVITY_KEY, type, ticker ?? null],
     queryFn: async () => {
-      const params = new URLSearchParams({ limit: String(DEFAULT_LIMIT) });
-      if (filter !== "all") params.set("type", filter);
+      const params = new URLSearchParams({
+        limit: String(ticker ? TICKER_LIMIT : DEFAULT_LIMIT),
+      });
+      if (type !== "all") params.set("type", type);
+      if (ticker) params.set("ticker", ticker);
       const page = await api.get<TransactionsPage>(
         `/api/transactions?${params.toString()}`,
       );

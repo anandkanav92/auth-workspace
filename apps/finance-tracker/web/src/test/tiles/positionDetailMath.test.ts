@@ -48,6 +48,17 @@ const basePosition: Position = {
 };
 
 describe("computePositionDetail", () => {
+  it("sell with no prior buy in the (period-bounded) ledger counts full proceeds as gain, no crash", () => {
+    // The opening buy predates the synced window: the first ledger event is a
+    // sell. With no known cost basis we treat avgCost as 0 → realised = proceeds.
+    const ledger: LedgerTransaction[] = [
+      tx({ type: "sell", quantity: 4, price: 250, occurred_at: "2026-03-01T00:00:00Z" }),
+    ];
+    const detail = computePositionDetail({ position: basePosition, ledger, fx });
+    expect(detail.realisedEur).toBeCloseTo(1000); // 250 × 4, avgCost 0
+    expect(detail.holdingSince).toBeNull(); // no buy in the ledger
+  });
+
   it("computes average-cost realised P&L over a buy/buy/sell sequence", () => {
     // Buy 10 @ 100, buy 10 @ 200 → avg cost 150 over 20 shares.
     // Sell 5 @ 250 → realised = (250 − 150) × 5 = 500 EUR.

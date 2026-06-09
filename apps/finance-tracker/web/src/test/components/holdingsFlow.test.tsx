@@ -142,14 +142,20 @@ function getImpl(path: string) {
   if (path === "/api/prices") return Promise.resolve(PRICES);
   if (path === "/api/profiles") return Promise.resolve(PROFILES);
   if (path === "/api/fx") return Promise.resolve(FX);
-  if (path.startsWith("/api/transactions"))
+  if (path.startsWith("/api/transactions")) {
+    // Mirror the server's ?ticker= filter (PositionSheet now scopes per-ticker).
+    const ticker = new URLSearchParams(path.split("?")[1] ?? "").get("ticker");
+    const items = ticker
+      ? TRANSACTIONS.filter((t) => t.ticker === ticker)
+      : TRANSACTIONS;
     return Promise.resolve({
-      items: TRANSACTIONS,
+      items,
       page: 1,
       perPage: 100,
-      totalItems: TRANSACTIONS.length,
+      totalItems: items.length,
       totalPages: 1,
     });
+  }
   throw new Error(`unexpected GET ${path}`);
 }
 

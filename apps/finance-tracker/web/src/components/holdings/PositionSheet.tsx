@@ -161,12 +161,12 @@ function DetailView({
     );
   }
 
-  // M5.2 — this ticker's ledger drives the trade history + realised/dividends.
-  const { data: ledgerAll = [], isLoading: ledgerLoading } = useActivity();
-  const ledger = useMemo(
-    () => ledgerAll.filter((t) => t.ticker === position.ticker),
-    [ledgerAll, position.ticker],
-  );
+  // M5.2 — this ticker's COMPLETE ledger drives the trade history + realised/
+  // dividends. Scope server-side by ticker so average-cost/realised P&L run on
+  // the full history (a global newest-N fetch could omit older trades → wrong).
+  const { data: ledger = [], isLoading: ledgerLoading } = useActivity({
+    ticker: position.ticker,
+  });
 
   // FX is read from the cache usePortfolioData already populated; absent → no
   // conversion (rate-1 default in fxToEur), so the sheet still renders.

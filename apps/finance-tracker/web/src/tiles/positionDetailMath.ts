@@ -99,6 +99,13 @@ export function computePositionDetail({
     // Sell: realise gain over the current average cost; reduce the running
     // position by the sold quantity at that same average (so the average is
     // unchanged by the sale — only buys re-weight it).
+    //
+    // EDGE — sell with no prior buy in the ledger (runningQty === 0): T212
+    // history can be period-bounded, so the opening buy may predate the synced
+    // window. With no known cost we treat avgCost as 0, which counts the full
+    // proceeds as realised gain and leaves runningQty at 0 (soldQty floored).
+    // This over-states realised P&L for such positions, but it's the only
+    // defensible figure without a cost basis — better than crashing or negative.
     const avgCostEur = runningQty > 0 ? runningCostEur / runningQty : 0;
     realisedEur += (priceEur - avgCostEur) * trade.quantity;
     const soldQty = Math.min(trade.quantity, runningQty);

@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
 import {
   useActivity,
   type ActivityFilter,
@@ -9,7 +11,11 @@ import {
 } from "@/lib/activity";
 import { summarizeRecent } from "@/lib/activityMath";
 import { formatDate, formatEur, formatQty } from "@/lib/format";
+import { fxToEur } from "@/tiles/buildPortfolio";
+import type { FxRates } from "@/tiles/types";
 import { cn } from "@/lib/utils";
+
+const EMPTY_FX: FxRates = { rates: {} };
 
 /**
  * M4 — the Activity feed at `/activity`.
@@ -38,12 +44,22 @@ export function ActivityPage() {
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const query = useActivity(filter);
 
+  // Ledger rows carry their native currency (USD/GBP/…); convert to EUR for any
+  // displayed amount using the SAME helper as the holdings join. Read FX from the
+  // cache usePortfolioData populates; absent → rate 1 (graceful).
+  const { data: fxData } = useQuery({
+    queryKey: ["fx"],
+    queryFn: () => api.get<FxRates | null>("/api/fx"),
+    staleTime: 60 * 60_000,
+  });
+  const fx = fxData ?? EMPTY_FX;
+
   // The summary card always reflects the full recent ledger, independent of the
   // active type filter — so we fetch it unfiltered.
   const allQuery = useActivity("all");
   const summary = useMemo(
-    () => summarizeRecent(allQuery.data ?? [], 30),
-    [allQuery.data],
+    () => summarizeRecent(allQuery.data ?? [], fx, 30),
+    [allQuery.data, fx],
   );
 
   return (
@@ -74,7 +90,7 @@ export function ActivityPage() {
           primaryAction={{ label: "Connect Trading 212", to: "/settings" }}
         />
       ) : (
-        <Feed transactions={query.data ?? []} />
+        <Feed transactions={query.data ?? []} fx={fx} />
       )}
     </div>
   );
@@ -188,7 +204,13 @@ function groupByDay(transactions: LedgerTransaction[]): DayGroup[] {
   return groups;
 }
 
-function Feed({ transactions }: { transactions: LedgerTransaction[] }) {
+function Feed({
+  transactions,
+  fx,
+}: {
+  transactions: LedgerTransaction[];
+  fx: FxRates;
+}) {
   const groups = useMemo(() => groupByDay(transactions), [transactions]);
 
   return (
@@ -200,7 +222,7 @@ function Feed({ transactions }: { transactions: LedgerTransaction[] }) {
           </h2>
           <ul className="space-y-2">
             {group.items.map((tx) => (
-              <ActivityRow key={tx.id} tx={tx} />
+              <ActivityRow key={tx.id} tx={tx} fx={fx} />
             ))}
           </ul>
         </section>
@@ -211,12 +233,15 @@ function Feed({ transactions }: { transactions: LedgerTransaction[] }) {
 
 // --- a single ledger row ----------------------------------------------------
 
-function ActivityRow({ tx }: { tx: LedgerTransaction }) {
+function ActivityRow({ tx, fx }: { tx: LedgerTransaction; fx: FxRates }) {
   const isDividend = tx.type === "dividend";
   const price = tx.price ?? 0;
   // Dividends: `price` is the cash amount (income). Buys/sells: per-share price
-  // → value is quantity × price.
-  const value = isDividend ? price : tx.quantity * price;
+  // → native value is quantity × price. Convert to EUR for the headline amount
+  // (rows are multi-currency); the per-share price stays NATIVE (truthful: you
+  // bought at $150, not €138).
+  const nativeValue = isDividend ? price : tx.quantity * price;
+  const valueEur = nativeValue * fxToEur(tx.currency, fx);
 
   return (
     <li className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
@@ -227,7 +252,7 @@ function ActivityRow({ tx }: { tx: LedgerTransaction }) {
         <p className="text-xs text-muted">
           {isDividend
             ? "Dividend"
-            : `${formatQty(tx.quantity)} @ ${formatEur(price)}`}
+            : `${formatQty(tx.quantity)} @ ${price.toFixed(2)} ${tx.currency}`}
         </p>
       </div>
 
@@ -239,7 +264,7 @@ function ActivityRow({ tx }: { tx: LedgerTransaction }) {
           )}
         >
           {isDividend ? "+" : ""}
-          {formatEur(value)}
+          {formatEur(valueEur)}
         </p>
         {isDividend ? (
           <p className="text-xs text-muted">income</p>

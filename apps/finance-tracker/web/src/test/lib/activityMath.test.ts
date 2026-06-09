@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 
 import { summarizeRecent } from "@/lib/activityMath";
 import type { LedgerTransaction } from "@/lib/activity";
+import type { FxRates } from "@/tiles/types";
+
+// EUR-base rates (units of CCY per 1 EUR). EUR dividends are unaffected; USD/GBP
+// convert by dividing by the rate.
+const FX: FxRates = { rates: { EUR: 1, USD: 1.1, GBP: 0.85 } };
 
 /**
  * M4.2 — pure recent-activity summary math.
@@ -41,7 +46,7 @@ describe("summarizeRecent", () => {
       tx({ type: "buy" }),
       tx({ type: "sell" }),
     ];
-    const summary = summarizeRecent(txns, 30, NOW);
+    const summary = summarizeRecent(txns, FX, 30, NOW);
     expect(summary.buys).toBe(2);
     expect(summary.sells).toBe(1);
   });
@@ -51,10 +56,22 @@ describe("summarizeRecent", () => {
       tx({ type: "dividend", quantity: 50, price: 12.5 }),
       tx({ type: "dividend", quantity: 999, price: 7.5 }),
     ];
-    const summary = summarizeRecent(txns, 30, NOW);
+    const summary = summarizeRecent(txns, FX, 30, NOW);
     expect(summary.dividendCount).toBe(2);
     // 12.5 + 7.5 — quantity (50/999) must NOT multiply in.
     expect(summary.dividendTotal).toBe(20);
+  });
+
+  it("converts multi-currency dividend cash to EUR before summing", () => {
+    const txns = [
+      tx({ type: "dividend", currency: "EUR", price: 5 }), // 5 EUR
+      tx({ type: "dividend", currency: "USD", price: 11 }), // 11 / 1.1 = 10 EUR
+      tx({ type: "dividend", currency: "GBP", price: 8.5 }), // 8.5 / 0.85 = 10 EUR
+    ];
+    const summary = summarizeRecent(txns, FX, 30, NOW);
+    expect(summary.dividendCount).toBe(3);
+    // EUR-correct total — a raw sum would wrongly give 24.5.
+    expect(summary.dividendTotal).toBeCloseTo(25, 6);
   });
 
   it("excludes events older than the window", () => {
@@ -63,7 +80,7 @@ describe("summarizeRecent", () => {
       tx({ type: "buy", occurred_at: daysAgo(45) }),
       tx({ type: "dividend", price: 10, occurred_at: daysAgo(45) }),
     ];
-    const summary = summarizeRecent(txns, 30, NOW);
+    const summary = summarizeRecent(txns, FX, 30, NOW);
     expect(summary.buys).toBe(1);
     expect(summary.dividendCount).toBe(0);
     expect(summary.dividendTotal).toBe(0);
@@ -75,7 +92,7 @@ describe("summarizeRecent", () => {
       tx({ type: "fee" }),
       tx({ type: "buy" }),
     ];
-    const summary = summarizeRecent(txns, 30, NOW);
+    const summary = summarizeRecent(txns, FX, 30, NOW);
     expect(summary.buys).toBe(1);
     expect(summary.sells).toBe(0);
     expect(summary.dividendCount).toBe(0);
@@ -84,13 +101,13 @@ describe("summarizeRecent", () => {
 
   it("treats a dividend with a null/absent price as zero cash", () => {
     const txns = [tx({ type: "dividend", price: undefined })];
-    const summary = summarizeRecent(txns, 30, NOW);
+    const summary = summarizeRecent(txns, FX, 30, NOW);
     expect(summary.dividendCount).toBe(1);
     expect(summary.dividendTotal).toBe(0);
   });
 
   it("returns zeros for an empty ledger", () => {
-    const summary = summarizeRecent([], 30, NOW);
+    const summary = summarizeRecent([], FX, 30, NOW);
     expect(summary).toEqual({
       buys: 0,
       sells: 0,
@@ -105,7 +122,7 @@ describe("summarizeRecent", () => {
       tx({ type: "buy", occurred_at: daysAgo(31) }),
     ];
     // Pass `now` but rely on the default `days`.
-    const summary = summarizeRecent(txns, undefined, NOW);
+    const summary = summarizeRecent(txns, FX, undefined, NOW);
     expect(summary.buys).toBe(1);
   });
 });

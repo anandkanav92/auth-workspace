@@ -10,6 +10,8 @@
  * — never `quantity × price`, which is meaningless for dividends.
  */
 
+import { fxToEur } from "@/tiles/buildPortfolio";
+import type { FxRates } from "@/tiles/types";
 import type { LedgerTransaction } from "@/lib/activity";
 
 export interface RecentSummary {
@@ -19,7 +21,7 @@ export interface RecentSummary {
   sells: number;
   /** Count of dividend events in the window. */
   dividendCount: number;
-  /** Sum of dividend CASH (the `price` field) in the window. */
+  /** Sum of dividend CASH in the window, converted to EUR. */
   dividendTotal: number;
 }
 
@@ -27,14 +29,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Summarise the trailing `days` (default 30) of a ledger: count buy/sell events
- * and sum dividend cash. `now` is injectable for deterministic tests; it
- * defaults to the current time.
+ * and sum dividend cash **in EUR**. Ledger rows are multi-currency (USD/GBP/…),
+ * so each dividend's cash is converted via `fxToEur` (the same helper the
+ * holdings join uses) before summing — otherwise the total mixes currencies.
+ * `now` is injectable for deterministic tests.
  *
  * Non buy/sell/dividend rows (adjustments, fees, imports) are ignored — the
  * card only reports trades and income.
  */
 export function summarizeRecent(
   transactions: LedgerTransaction[],
+  fx: FxRates,
   days = 30,
   now: number = Date.now(),
 ): RecentSummary {
@@ -59,8 +64,8 @@ export function summarizeRecent(
         break;
       case "dividend":
         summary.dividendCount += 1;
-        // `price` IS the cash amount for dividends; absent → 0.
-        summary.dividendTotal += tx.price ?? 0;
+        // `price` IS the cash amount for dividends; convert native → EUR.
+        summary.dividendTotal += (tx.price ?? 0) * fxToEur(tx.currency, fx);
         break;
       default:
         break;
