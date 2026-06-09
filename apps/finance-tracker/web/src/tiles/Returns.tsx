@@ -1,0 +1,119 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+
+import { useFullLedger } from "@/lib/activity";
+import { api } from "@/lib/api";
+import { formatEur, formatPct } from "@/lib/format";
+
+import { computePortfolioReturns } from "./returnsMath";
+import { TileCard, TileEmpty, TileSkeleton } from "./TileCard";
+import { usePortfolioData } from "./usePortfolioData";
+import type { FxRates, TileProps } from "./types";
+
+/** One labelled figure in the Returns grid. */
+function Metric({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "signed";
+  /** When "signed", colour by the leading sign of the formatted value. */
+}) {
+  const signClass =
+    tone === "signed"
+      ? value.trimStart().startsWith("-")
+        ? "text-danger"
+        : "text-success"
+      : "text-fg";
+  return (
+    <div className="flex flex-col items-center rounded-lg bg-muted/10 p-3">
+      <span className={`text-lg font-semibold tabular-nums ${signClass}`}>
+        {value}
+      </span>
+      <span className="mt-0.5 text-center text-[11px] text-muted">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * M6 — Returns tile.
+ *
+ * A compact read on the three P&L figures the rest of the dashboard doesn't
+ * surface together: live UNREALISED gain (€ + %), locked-in REALISED gain (€,
+ * average-cost over the full ledger), and DIVIDENDS actually received in the
+ * trailing 12 months (€). Realised + dividends need the complete ledger, so this
+ * tile reads `useFullLedger` rather than the truncated feed.
+ */
+export function Returns({ accountIds }: TileProps) {
+  const { data: portfolio, isLoading: portfolioLoading } =
+    usePortfolioData(accountIds);
+  const { data: ledger = [], isLoading: ledgerLoading } = useFullLedger();
+
+  // FX from the same cache usePortfolioData populates; absent → rate-1 default.
+  const { data: fx } = useQuery({
+    queryKey: ["fx"],
+    queryFn: () => api.get<FxRates | null>("/api/fx"),
+    staleTime: 60 * 60_000,
+  });
+
+  const result = useMemo(() => {
+    if (!portfolio) return null;
+    return computePortfolioReturns(
+      portfolio.positions,
+      ledger,
+      fx ?? { rates: {} },
+    );
+  }, [portfolio, ledger, fx]);
+
+  const isLoading = portfolioLoading || ledgerLoading;
+  const hasData = result != null && (portfolio?.positions.length ?? 0) > 0;
+
+  return (
+    <TileCard title="Returns" infoHash="returns">
+      {isLoading ? (
+        <TileSkeleton />
+      ) : !hasData ? (
+        <TileEmpty message="No positions to report returns for yet." />
+      ) : (
+        <div>
+          <div className="grid grid-cols-3 gap-2">
+            <Metric
+              label="Unrealised"
+              tone="signed"
+              value={
+                result.unrealisedPct !== null
+                  ? `${formatEur(result.unrealisedEur)}`
+                  : formatEur(result.unrealisedEur)
+              }
+            />
+            <Metric
+              label="Realised"
+              tone="signed"
+              value={formatEur(result.realisedEur)}
+            />
+            <Metric label="Dividends 12m" value={formatEur(result.dividendsEur12m)} />
+          </div>
+
+          {result.unrealisedPct !== null ? (
+            <p className="mt-2 text-xs text-muted">
+              Unrealised{" "}
+              <span className="font-medium text-fg">
+                {formatPct(result.unrealisedPct)}
+              </span>{" "}
+              over the holdings where we know your cost; realised + dividends are
+              actuals from your transaction history.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-muted">
+              Realised P&amp;L and dividends are actuals from your transaction
+              history. Unrealised needs a cost basis, which Revolut doesn&rsquo;t
+              provide.
+            </p>
+          )}
+        </div>
+      )}
+    </TileCard>
+  );
+}

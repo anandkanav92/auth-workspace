@@ -19,6 +19,7 @@ import { Health } from "./Health";
 import { Income } from "./Income";
 import { Movers } from "./Movers";
 import { Quality } from "./Quality";
+import { Returns } from "./Returns";
 import { Treemap } from "./Treemap";
 import type { TileProps } from "./types";
 
@@ -39,6 +40,7 @@ export const PHASE_1_TILES: TileDef[] = [
     component: DiversificationScore,
   },
   { id: "movers", title: "Movers", component: Movers },
+  { id: "returns", title: "Returns", component: Returns },
   { id: "health", title: "Health checks", component: Health },
   { id: "income", title: "Income", component: Income },
   { id: "quality", title: "Quality", component: Quality },

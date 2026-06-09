@@ -6,6 +6,8 @@ import {
   Gauge,
   Layers,
   PieChart,
+  Receipt,
+  Scale,
   Share2,
   ShieldCheck,
   TrendingUp,
@@ -137,6 +139,57 @@ export function LearnPage() {
       </MetricSection>
 
       <MetricSection
+        id="returns"
+        icon={Scale}
+        title="Realised vs unrealised P&L"
+        lede="What you've actually locked in versus what's still riding on the market."
+        formula="realised = Σ (sell price − average cost) × quantity sold, per ticker"
+      >
+        <p>
+          <strong>Unrealised</strong> P&amp;L is paper gain or loss on positions
+          you still hold — current value minus what they cost. It moves every time
+          the price does and isn&rsquo;t money in hand until you sell. It only
+          covers holdings where we know your cost (so not cost-less Revolut
+          positions).
+        </p>
+        <p>
+          <strong>Realised</strong> P&amp;L is the gain you&rsquo;ve already booked
+          by selling. We compute it per ticker using <em>average cost</em>: each
+          buy re-weights a running average cost per share, and every sale realises
+          (sale price − that average) × shares sold. Sales don&rsquo;t change the
+          average — only buys do. This matches how brokers report gains on
+          fractional, repeatedly-traded positions. Prices in other currencies are
+          converted to euros with the same ECB rates used everywhere else.
+        </p>
+        <p>
+          If a sale appears before any buy (your opening purchase predates the
+          synced history), we have no cost to subtract, so the full proceeds count
+          as gain — an over-statement, but the only honest figure without a cost
+          basis.
+        </p>
+      </MetricSection>
+
+      <MetricSection
+        id="dividends"
+        icon={Receipt}
+        title="Dividends received"
+        lede="The cash your holdings actually paid you over the last year."
+        formula="Σ dividend cash with a pay date in the trailing 365 days → EUR"
+      >
+        <p>
+          Unlike the forward <em>estimate</em> on the Income tile, this is the real
+          cash. We add up every dividend in your transaction history with a payment
+          date within the last 365 days, converting each into euros at the ECB
+          rate. The headline on the Income tile shows this actual figure, with the
+          forward estimate as a secondary line.
+        </p>
+        <p>
+          If your account has no dividend history yet, the tile falls back to the
+          forward estimate only.
+        </p>
+      </MetricSection>
+
+      <MetricSection
         id="allocation"
         icon={PieChart}
         title="Allocation"
@@ -247,13 +300,16 @@ export function LearnPage() {
         id="income"
         icon={Coins}
         title="Income & yield"
-        lede="A rough estimate of the dividends your holdings might pay in a year."
+        lede="What you actually received in dividends, plus a forward estimate."
         formula="Σ (position value × dividend yield)  ·  yield = income ÷ total value"
       >
         <p>
-          We add up each position&rsquo;s value times its dividend yield. Holdings
-          with no yield data are skipped, so treat this as a floor — an
-          approximation, not a promise. Dividends can be cut, raised, or paused.
+          The headline is the dividends you <strong>actually received</strong> over
+          the last 12 months (see <em>Dividends received</em> above). The secondary
+          line is a forward <strong>estimate</strong>: each position&rsquo;s value
+          times its dividend yield. Holdings with no yield data are skipped, so
+          treat the estimate as a floor — an approximation, not a promise.
+          Dividends can be cut, raised, or paused.
         </p>
       </MetricSection>
 
