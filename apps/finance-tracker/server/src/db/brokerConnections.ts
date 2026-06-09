@@ -34,12 +34,14 @@ export class BrokerConnectionsRepo extends PerUserRepo<
   }
 
   /**
-   * ADMIN-SCOPED, ALL-USERS read of every broker connection row across users.
-   * Backs the daily auto-sync cron, which fans out one sync per connection.
-   * Mirrors holdingsSnapshot.listAllByDateRange / symbolProfiles.listStale:
-   * uses pbAdmin() and is NOT request-scoped — cron only.
+   * ADMIN-SCOPED, ALL-USERS read of every broker connection row — INCLUDING
+   * `error`/`syncing` rows ON PURPOSE: the daily cron retries errored
+   * connections (a transient 429 self-heals) and a stale `syncing` (crashed run)
+   * recovers. Backs the daily auto-sync cron's fan-out. Mirrors
+   * holdingsSnapshot.listAllByDateRange / symbolProfiles.listStale: uses
+   * pbAdmin() and is NOT request-scoped — cron only.
    */
-  async listAllConnected(): Promise<BrokerConnection[]> {
+  async listAllForSync(): Promise<BrokerConnection[]> {
     const pb = await pbAdmin();
     return pb
       .collection('broker_connections')

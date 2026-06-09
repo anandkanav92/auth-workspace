@@ -20,15 +20,15 @@ function makeDeps(overrides: {
   connections?: BrokerConnection[];
   sync?: (userId: string) => Promise<unknown>;
 }): SyncBrokersDeps & {
-  listAllConnected: ReturnType<typeof vi.fn>;
+  listAllForSync: ReturnType<typeof vi.fn>;
   syncUser: ReturnType<typeof vi.fn>;
 } {
-  const listAllConnected = vi.fn(async () => overrides.connections ?? []);
+  const listAllForSync = vi.fn(async () => overrides.connections ?? []);
   const syncUser = vi.fn(overrides.sync ?? (async () => ({ positions: 0, orders: 0, dividends: 0 })));
   return {
-    connections: { listAllConnected },
+    connections: { listAllForSync },
     syncUser,
-    listAllConnected,
+    listAllForSync,
     syncUser,
   } as never;
 }

@@ -15,7 +15,7 @@
 import type { BrokerConnectionsRepo } from '../db/brokerConnections';
 
 export interface SyncBrokersDeps {
-  connections: Pick<BrokerConnectionsRepo, 'listAllConnected'>;
+  connections: Pick<BrokerConnectionsRepo, 'listAllForSync'>;
   /** Sync one user's broker holdings + ledger (records its own status). */
   syncUser: (userId: string) => Promise<unknown>;
 }
@@ -32,11 +32,15 @@ export interface SyncBrokersResult {
 /**
  * List every broker connection and sync each user. A per-user throw is caught
  * and counted (never rethrown) so one failure doesn't abort the batch.
+ *
+ * TODO(scale): syncs run sequentially with no jitter/cap; when there are many
+ * users (or a second broker is added), fan out per (user, broker) with batching
+ * + jitter so a 06:00 stampede doesn't hammer the upstream rate limits.
  */
 export async function runSyncBrokersWith(
   deps: SyncBrokersDeps,
 ): Promise<SyncBrokersResult> {
-  const connections = await deps.connections.listAllConnected();
+  const connections = await deps.connections.listAllForSync();
 
   let ok = 0;
   let failed = 0;
