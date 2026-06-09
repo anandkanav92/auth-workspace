@@ -27,12 +27,16 @@ function Metric({
         ? "text-danger"
         : "text-success"
       : "text-fg";
+  // A full-width row (label left, value right) so long euro amounts never
+  // collide — three of these stacked read cleanly even on a narrow phone.
   return (
-    <div className="flex flex-col items-center rounded-lg bg-muted/10 p-3">
-      <span className={`text-lg font-semibold tabular-nums ${signClass}`}>
+    <div className="flex items-baseline justify-between gap-3 rounded-lg bg-muted/10 px-3 py-2.5">
+      <span className="shrink-0 text-xs text-muted">{label}</span>
+      <span
+        className={`min-w-0 truncate text-right text-base font-semibold tabular-nums ${signClass}`}
+      >
         {value}
       </span>
-      <span className="mt-0.5 text-center text-[11px] text-muted">{label}</span>
     </div>
   );
 }
@@ -78,7 +82,7 @@ export function Returns({ accountIds }: TileProps) {
         <TileEmpty message="No positions to report returns for yet." />
       ) : (
         <div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="space-y-2">
             <Metric
               label="Unrealised"
               tone="signed"
@@ -89,7 +93,10 @@ export function Returns({ accountIds }: TileProps) {
               tone="signed"
               value={formatEur(result.realisedEur)}
             />
-            <Metric label="Dividends 12m" value={formatEur(result.dividendsEur12m)} />
+            <Metric
+              label="Dividends (12m)"
+              value={formatEur(result.dividendsEur12m)}
+            />
           </div>
 
           {result.unrealisedPct !== null ? (
