@@ -83,15 +83,16 @@ export function Returns({ accountIds }: TileProps) {
       ) : (
         <div>
           <div className="space-y-2">
+            {/* Realised P&L is intentionally hidden: Trading 212's order history
+                is period-bounded, so sells whose opening buys predate the synced
+                window have no cost to net against and massively over-state the
+                realised figure. We surface only numbers we can substantiate.
+                (returnsMath still computes realisedEur for the per-position sheet,
+                where it's scoped to one ticker's full history.) */}
             <Metric
               label="Unrealised"
               tone="signed"
               value={formatEur(result.unrealisedEur)}
-            />
-            <Metric
-              label="Realised"
-              tone="signed"
-              value={formatEur(result.realisedEur)}
             />
             <Metric
               label="Dividends (12m)"
@@ -105,13 +106,13 @@ export function Returns({ accountIds }: TileProps) {
               <span className="font-medium text-fg">
                 {formatPct(result.unrealisedPct)}
               </span>{" "}
-              over the holdings where we know your cost; realised + dividends are
-              actuals from your transaction history.
+              over the holdings where we know your cost; dividends are the actual
+              cash received in the last 12 months.
             </p>
           ) : (
             <p className="mt-2 text-xs text-muted">
-              Realised P&amp;L and dividends are actuals from your transaction
-              history. Unrealised needs a cost basis, which Revolut doesn&rsquo;t
+              Dividends are the actual cash received in the last 12 months.
+              Unrealised P&amp;L needs a cost basis, which Revolut doesn&rsquo;t
               provide.
             </p>
           )}
