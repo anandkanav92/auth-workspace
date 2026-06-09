@@ -62,15 +62,14 @@ export interface PositionDetailInputs {
   fx: FxRates;
 }
 
-/** Compute the derived per-position detail. Pure; safe on an empty ledger. */
-export function computePositionDetail({
-  position,
-  ledger,
-  fx,
-}: PositionDetailInputs): PositionDetail {
-  // Buy/sell events, oldest → newest. A stable sort on the parsed timestamp keeps
-  // same-instant rows in their original ledger order.
-  const trades: TradeEvent[] = ledger
+/**
+ * Order a ticker's buy/sell ledger rows into oldest → newest {@link TradeEvent}s.
+ *
+ * A stable sort on the parsed timestamp keeps same-instant rows in their
+ * original ledger order. Non buy/sell rows (dividends, fees, …) are dropped.
+ */
+export function tradesFromLedger(ledger: LedgerTransaction[]): TradeEvent[] {
+  return ledger
     .filter((t) => t.type === "buy" || t.type === "sell")
     .map((t) => ({
       date: t.occurred_at,
@@ -79,12 +78,31 @@ export function computePositionDetail({
       price: t.price ?? 0,
       currency: t.currency,
     }))
-    .sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
 
-  // Average-cost realised P&L. Track running quantity + total cost (both in EUR)
-  // so avgCost = totalCostEur / qty at each sell.
+/**
+ * Average-cost realised P&L (EUR) over an ORDERED list of trades.
+ *
+ * The single source of truth for realised gains: a running average cost per
+ * share is built from buys; each sell realises `(sellPrice − avgCostAtThatPoint)
+ * × sellQty`. Sells do NOT move the running average (only buys re-weight it) —
+ * the standard moving-average / weighted-average cost basis, matching how the
+ * broker reports realised gains for fractional, repeatedly-traded positions.
+ *
+ * Trade prices are converted to EUR with the SAME pence/GBX-safe {@link fxToEur}
+ * the portfolio join uses, so currency conversion lives in exactly one place.
+ *
+ * EDGE — sell with no prior buy in the ledger (runningQty === 0): T212 history
+ * can be period-bounded, so the opening buy may predate the synced window. With
+ * no known cost we treat avgCost as 0, which counts the full proceeds as
+ * realised gain and leaves runningQty at 0 (soldQty floored). This over-states
+ * realised P&L for such positions, but it's the only defensible figure without a
+ * cost basis — better than crashing or going negative.
+ *
+ * @param trades MUST already be oldest → newest (see {@link tradesFromLedger}).
+ */
+export function realisedEurFromTrades(trades: TradeEvent[], fx: FxRates): number {
   let runningQty = 0;
   let runningCostEur = 0;
   let realisedEur = 0;
@@ -96,22 +114,24 @@ export function computePositionDetail({
       runningCostEur += priceEur * trade.quantity;
       continue;
     }
-    // Sell: realise gain over the current average cost; reduce the running
-    // position by the sold quantity at that same average (so the average is
-    // unchanged by the sale — only buys re-weight it).
-    //
-    // EDGE — sell with no prior buy in the ledger (runningQty === 0): T212
-    // history can be period-bounded, so the opening buy may predate the synced
-    // window. With no known cost we treat avgCost as 0, which counts the full
-    // proceeds as realised gain and leaves runningQty at 0 (soldQty floored).
-    // This over-states realised P&L for such positions, but it's the only
-    // defensible figure without a cost basis — better than crashing or negative.
     const avgCostEur = runningQty > 0 ? runningCostEur / runningQty : 0;
     realisedEur += (priceEur - avgCostEur) * trade.quantity;
     const soldQty = Math.min(trade.quantity, runningQty);
     runningQty -= soldQty;
     runningCostEur -= avgCostEur * soldQty;
   }
+
+  return realisedEur;
+}
+
+/** Compute the derived per-position detail. Pure; safe on an empty ledger. */
+export function computePositionDetail({
+  position,
+  ledger,
+  fx,
+}: PositionDetailInputs): PositionDetail {
+  const trades = tradesFromLedger(ledger);
+  const realisedEur = realisedEurFromTrades(trades, fx);
 
   // Dividend cash → EUR. `price` IS the total cash for dividend rows.
   let dividendsEur = 0;
