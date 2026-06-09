@@ -1,6 +1,7 @@
 // Per-user repo for the `broker_connections` collection. See perUserRepo.ts
 // for the shared CRUD + user-scoping logic.
 import { PerUserRepo } from './perUserRepo';
+import { pbAdmin } from '../lib/pb';
 import type {
   BrokerConnection,
   BrokerConnectionCreate,
@@ -30,6 +31,19 @@ export class BrokerConnectionsRepo extends PerUserRepo<
       params: { broker },
     });
     return matches[0] ?? null;
+  }
+
+  /**
+   * ADMIN-SCOPED, ALL-USERS read of every broker connection row across users.
+   * Backs the daily auto-sync cron, which fans out one sync per connection.
+   * Mirrors holdingsSnapshot.listAllByDateRange / symbolProfiles.listStale:
+   * uses pbAdmin() and is NOT request-scoped — cron only.
+   */
+  async listAllConnected(): Promise<BrokerConnection[]> {
+    const pb = await pbAdmin();
+    return pb
+      .collection('broker_connections')
+      .getFullList<BrokerConnection>();
   }
 }
 

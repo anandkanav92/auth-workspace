@@ -1,5 +1,5 @@
-// node-cron scheduler wiring (M8.1). Registers all five market-data jobs on
-// their schedules in Europe/Amsterdam, gated by CRON_ENABLED=true so tests and
+// node-cron scheduler wiring (M8.1). Registers all scheduled jobs on their
+// schedules in Europe/Amsterdam, gated by CRON_ENABLED=true so tests and
 // `pnpm dev` never auto-run real network jobs.
 //
 // All jobs are idempotent (keyed upserts / skip-existing), so a missed-then-
@@ -18,6 +18,7 @@ import { runRefreshFx } from './refreshFx';
 import { runSnapshotHoldings } from './snapshotHoldings';
 import { runRefreshProfiles } from './refreshProfiles';
 import { runPruneSnapshots } from './pruneSnapshots';
+import { runSyncBrokers } from './syncBrokers';
 
 export const CRON_TIMEZONE = 'Europe/Amsterdam';
 
@@ -28,7 +29,7 @@ export interface CronJob {
   run: () => Promise<unknown>;
 }
 
-// The five scheduled jobs. Schedules are Amsterdam-local (see CRON_TIMEZONE).
+// The scheduled jobs. Schedules are Amsterdam-local (see CRON_TIMEZONE).
 export const CRON_JOBS: CronJob[] = [
   {
     // Hourly on the hour, 07:00–22:00, Monday–Friday (market hours).
@@ -59,6 +60,12 @@ export const CRON_JOBS: CronJob[] = [
     name: 'pruneSnapshots',
     schedule: '0 3 * * 0',
     run: runPruneSnapshots,
+  },
+  {
+    // Daily at 06:00 — fan out the Trading 212 sync to every connection.
+    name: 'syncBrokers',
+    schedule: '0 6 * * *',
+    run: runSyncBrokers,
   },
 ];
 

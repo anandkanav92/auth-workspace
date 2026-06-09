@@ -3,7 +3,7 @@ import { startCron, CRON_JOBS, CRON_TIMEZONE, type CronJob } from '../../src/cro
 import type { ScheduledTask } from 'node-cron';
 
 describe('CRON_JOBS registry', () => {
-  it('registers all five jobs with valid cron expressions', () => {
+  it('registers all jobs with valid cron expressions', () => {
     const names = CRON_JOBS.map((j) => j.name).sort();
     expect(names).toEqual([
       'pruneSnapshots',
@@ -11,6 +11,7 @@ describe('CRON_JOBS registry', () => {
       'refreshPrices',
       'refreshProfiles',
       'snapshotHoldings',
+      'syncBrokers',
     ]);
   });
 
@@ -25,6 +26,7 @@ describe('CRON_JOBS registry', () => {
     expect(byName.snapshotHoldings).toBe('0 2 * * *'); // nightly 02:00
     expect(byName.refreshProfiles).toBe('0 2 * * 0'); // weekly Sun 02:00
     expect(byName.pruneSnapshots).toBe('0 3 * * 0'); // weekly Sun 03:00
+    expect(byName.syncBrokers).toBe('0 6 * * *'); // daily 06:00
   });
 });
 
