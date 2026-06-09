@@ -82,11 +82,7 @@ export function Returns({ accountIds }: TileProps) {
             <Metric
               label="Unrealised"
               tone="signed"
-              value={
-                result.unrealisedPct !== null
-                  ? `${formatEur(result.unrealisedEur)}`
-                  : formatEur(result.unrealisedEur)
-              }
+              value={formatEur(result.unrealisedEur)}
             />
             <Metric
               label="Realised"
