@@ -38,6 +38,7 @@ import { extractPositionedText } from '../importers/safe-pdf';
 import { PdfParseError } from '../importers/safe-pdf';
 import { detectImporter } from '../importers/registry';
 import { YahooPriceProvider } from '../providers/yahoo';
+import { enrichPricesWith } from '../market/enrichPrices';
 import type { PriceProvider } from '../providers/types';
 import { computeDiff, summariseDiff } from './importDiff';
 import {
@@ -258,13 +259,16 @@ async function enrichTickers(diff: DiffEntry[]): Promise<void> {
   // Skip 'removed' entries: a holding the statement dropped no longer needs a
   // price/profile.
   const present = diff.filter((d) => d.status !== 'removed');
+
+  // Profiles: the heavy call (sector/ETF look-through). resolveTicker already
+  // cached profiles for tickers it resolved, so we only (re)fetch genuinely-new
+  // ones here.
   await Promise.all(
-    present.map(async (d) => {
-      const [profile, quote] = await Promise.all([
-        d.isNewTicker ? provider.profile(d.ticker).catch(() => null) : null,
-        provider.quote(d.ticker).catch(() => null),
-      ]);
-      if (profile) {
+    present
+      .filter((d) => d.isNewTicker)
+      .map(async (d) => {
+        const profile = await provider.profile(d.ticker).catch(() => null);
+        if (!profile) return;
         const row: SymbolProfileCreate = {
           ticker: profile.ticker,
           isin: profile.isin ?? d.isin,
@@ -284,19 +288,13 @@ async function enrichTickers(diff: DiffEntry[]): Promise<void> {
           last_refreshed_at: new Date().toISOString(),
         };
         await symbolProfilesRepo.upsert(row).catch(() => undefined);
-      }
-      if (quote) {
-        await priceCacheRepo
-          .upsert({
-            ticker: quote.ticker,
-            price: quote.price,
-            currency: quote.currency,
-            as_of: quote.asOf.toISOString(),
-            last_fetched_at: new Date().toISOString(),
-            data_source: quote.source ?? 'yahoo', // true provenance from the chain
-          })
-          .catch(() => undefined);
-      }
-    }),
+      }),
+  );
+
+  // Prices: fetched for EVERY imported ticker (not just new ones) via the SAME
+  // shared helper the Trading 212 sync uses, so the two never drift.
+  await enrichPricesWith(
+    present.map((d) => d.ticker),
+    { provider, prices: priceCacheRepo },
   );
 }

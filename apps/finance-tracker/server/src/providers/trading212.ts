@@ -38,6 +38,17 @@ export class Trading212ApiError extends Error {
   }
 }
 
+/** Instrument metadata for a T212 ticker, from /equity/metadata/instruments.
+ *  The AUTHORITATIVE ISIN/currency source — unlike the order ledger it covers
+ *  EVERY held position, including transferred-in shares and buys older than the
+ *  synced order-history window. `currency` is the RAW code (e.g. GBX). */
+export interface T212Instrument {
+  t212Ticker: string;
+  isin: string;
+  currency?: string;
+  name?: string;
+}
+
 /** A single open portfolio position. ISIN/currency are NOT in this endpoint —
  *  the sync resolves them from the order-derived ticker map. */
 export interface T212Position {
@@ -89,6 +100,13 @@ interface RawPosition {
   averagePrice: number;
   currentPrice: number;
   initialFillDate: string;
+}
+
+interface RawInstrumentMeta {
+  ticker: string;
+  isin: string;
+  currencyCode: string;
+  name?: string;
 }
 
 interface RawInstrument {
@@ -223,6 +241,29 @@ export class Trading212Provider implements BrokerProvider {
       averagePrice: p.averagePrice,
       currentPrice: p.currentPrice,
       initialFillDate: p.initialFillDate,
+    }));
+  }
+
+  /**
+   * Full instrument metadata (the whole tradeable universe). The AUTHORITATIVE
+   * ISIN/currency map — the sync uses it to fill positions the order ledger
+   * doesn't cover (transferred-in / pre-history buys). Single call; throws on a
+   * persistent error so the sync can degrade to the order-derived map.
+   */
+  async fetchInstruments(creds: string): Promise<T212Instrument[]> {
+    const { ok, status, body } = await this.fetchJson(
+      `${BASE_URL}/api/v0/equity/metadata/instruments`,
+      creds,
+    );
+    if (!ok) throw new Trading212ApiError(`instruments fetch failed (status ${status})`, status);
+    const rows = body as RawInstrumentMeta[];
+    return rows.map((r) => ({
+      t212Ticker: r.ticker,
+      isin: r.isin,
+      // RAW code (e.g. GBX) so the sync pence-normalises the cost basis, mirroring
+      // how the order-derived map stores rawCurrency.
+      currency: r.currencyCode,
+      name: r.name,
     }));
   }
 

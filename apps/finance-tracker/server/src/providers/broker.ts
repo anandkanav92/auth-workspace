@@ -6,7 +6,12 @@
 // service (Task 2.1). All methods take the COMBINED credentials string
 // ("<public>:<private>") — see trading212.ts for the concrete implementation.
 
-import type { LedgerEvent, LedgerPage, T212Position } from './trading212';
+import type {
+  LedgerEvent,
+  LedgerPage,
+  T212Instrument,
+  T212Position,
+} from './trading212';
 
 export interface BrokerProvider {
   /**
@@ -23,6 +28,10 @@ export interface BrokerProvider {
    *  order-derived ticker map (not present on this endpoint). */
   fetchPositions(creds: string): Promise<T212Position[]>;
 
+  /** Authoritative instrument metadata (ISIN/currency for every ticker). The
+   *  sync uses it to cover positions the order ledger misses. */
+  fetchInstruments(creds: string): Promise<T212Instrument[]>;
+
   /** A page of buy/sell ledger events. `cursor` is the prior page's nextCursor. */
   fetchOrders(creds: string, cursor?: string): Promise<LedgerPage>;
 
@@ -33,4 +42,9 @@ export interface BrokerProvider {
 // The real provider lives in trading212.ts; re-export it here so existing
 // imports (`../providers/broker` in routes/broker.ts) bind to the real impl.
 export { Trading212Provider } from './trading212';
-export type { LedgerEvent, LedgerPage, T212Position } from './trading212';
+export type {
+  LedgerEvent,
+  LedgerPage,
+  T212Instrument,
+  T212Position,
+} from './trading212';

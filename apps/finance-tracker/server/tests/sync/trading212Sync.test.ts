@@ -9,6 +9,7 @@ import { Trading212ApiError } from '../../src/providers/trading212';
 import type {
   LedgerEvent,
   LedgerPage,
+  T212Instrument,
   T212Position,
 } from '../../src/providers/trading212';
 import type {
@@ -115,6 +116,9 @@ function makeProvider(over?: { throwOnPositions?: boolean }) {
       }
       return POSITIONS;
     }),
+    // Authoritative instrument metadata. Only CALLED when a position is missing
+    // from the order-derived map, so the happy-path tests never hit it.
+    fetchInstruments: vi.fn(async (): Promise<T212Instrument[]> => []),
     fetchOrders: vi.fn(async (_creds: string, cursor?: string): Promise<LedgerPage> => {
       if (!cursor) return { items: ORDERS_PAGE_1, nextCursor: 'orders-page-2' };
       return { items: ORDERS_PAGE_2, nextCursor: undefined };
@@ -262,6 +266,7 @@ function depsFrom(
     replaceHoldings: fakes.replaceHoldings,
     // echo the broker symbol back as the resolved ticker
     resolveTicker: vi.fn(async (_isin: string, brokerSymbol: string) => brokerSymbol),
+    enrichPrices: vi.fn(async (_tickers: string[]) => {}),
     decrypt: vi.fn(() => 'pub:priv'),
     now: () => new Date('2026-06-08T12:00:00Z'),
   };
@@ -317,6 +322,88 @@ describe('runTrading212SyncWith', () => {
     expect(conn.status).toBe('connected');
     expect(conn.last_synced_at).toBe('2026-06-08T12:00:00.000Z');
     expect(conn.last_error ?? '').toBe('');
+  });
+
+  it('enriches a live price for every resolved holding ticker (no €0 until cron)', async () => {
+    const fakes = makeFakes();
+    const deps = depsFrom(fakes, makeProvider());
+
+    await runTrading212SyncWith(deps, 'u1');
+
+    // Called once with the resolved tickers of the synced holdings, so the
+    // dashboard values them immediately instead of at price 0.
+    expect(deps.enrichPrices).toHaveBeenCalledTimes(1);
+    const tickers = (deps.enrichPrices as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string[];
+    expect([...tickers].sort()).toEqual(['AAPL', 'VUKG']);
+  });
+
+  it('fills ISIN/currency from instruments metadata for a position with no order', async () => {
+    const fakes = makeFakes();
+    const provider = makeProvider();
+    // A position the order ledger does NOT cover (transferred-in / pre-history):
+    // only AAPL has orders, but the portfolio also holds a GBX LSE stock.
+    provider.fetchPositions.mockResolvedValue([
+      POSITIONS[0], // AAPL — covered by orders
+      {
+        t212Ticker: 'TSCO_GB_EQ', // NOT in the order ledger
+        quantity: 10,
+        averagePrice: 2500, // GBX (pence) → ÷100 → 250 GBP cost basis
+        currentPrice: 2600,
+        initialFillDate: '2024-01-01T00:00:00Z',
+      },
+    ]);
+    provider.fetchInstruments.mockResolvedValue([
+      { t212Ticker: 'TSCO_GB_EQ', isin: 'GB00BLGZ9862', currency: 'GBX', name: 'Tesco' },
+    ]);
+    const deps = depsFrom(fakes, provider);
+
+    await runTrading212SyncWith(deps, 'u1');
+
+    // Metadata was consulted because TSCO had no order.
+    expect(provider.fetchInstruments).toHaveBeenCalledTimes(1);
+
+    const tsco = fakes.peek.holdings().find((h) => h.ticker === 'TSCO')!;
+    expect(tsco).toBeTruthy();
+    expect(tsco.isin).toBe('GB00BLGZ9862');
+    // GBX cost basis pence-normalised → 10 × 2500 = 25000 pence = 250 GBP.
+    expect(tsco.cost_basis).toBe(250);
+    expect(tsco.cost_currency).toBe('GBP');
+  });
+
+  it('degrades gracefully (no throw) when instruments metadata fails', async () => {
+    const fakes = makeFakes();
+    const provider = makeProvider();
+    provider.fetchPositions.mockResolvedValue([
+      {
+        t212Ticker: 'TSCO_GB_EQ', // uncovered by orders → triggers metadata fetch
+        quantity: 10,
+        averagePrice: 2500,
+        currentPrice: 2600,
+        initialFillDate: '2024-01-01T00:00:00Z',
+      },
+    ]);
+    provider.fetchInstruments.mockRejectedValue(
+      new Trading212ApiError('instruments fetch failed (status 429)', 429),
+    );
+    const deps = depsFrom(fakes, provider);
+
+    // The sync still succeeds; the uncovered position just lacks ISIN/cost.
+    const result = await runTrading212SyncWith(deps, 'u1');
+    expect(result).toMatchObject({ positions: 1 });
+    const tsco = fakes.peek.holdings().find((h) => h.ticker === 'TSCO')!;
+    expect(tsco).toBeTruthy();
+    expect(tsco.isin).toBeUndefined();
+  });
+
+  it('does NOT fetch instruments metadata when every position is covered by orders', async () => {
+    const fakes = makeFakes();
+    const provider = makeProvider();
+    const deps = depsFrom(fakes, provider);
+
+    await runTrading212SyncWith(deps, 'u1');
+    // AAPL + VUKG both have orders → no need for the heavy metadata call.
+    expect(provider.fetchInstruments).not.toHaveBeenCalled();
   });
 
   it('sets status=syncing at the START, then status=connected on success', async () => {

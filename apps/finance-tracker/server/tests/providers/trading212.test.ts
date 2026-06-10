@@ -99,6 +99,44 @@ describe('Trading212Provider.fetchPositions', () => {
   });
 });
 
+describe('Trading212Provider.fetchInstruments', () => {
+  it('maps the instruments metadata to {t212Ticker, isin, raw currency, name}', async () => {
+    mockFetch({
+      '/equity/metadata/instruments': {
+        body: [
+          {
+            ticker: 'TSCO_GB_EQ',
+            type: 'STOCK',
+            isin: 'GB00BLGZ9862',
+            currencyCode: 'GBX', // RAW pence code — pence-normalised at use, not here
+            name: 'Tesco',
+          },
+          {
+            ticker: 'AAPL_US_EQ',
+            type: 'STOCK',
+            isin: 'US0378331005',
+            currencyCode: 'USD',
+            name: 'Apple Inc.',
+          },
+        ],
+      },
+    });
+    const p = new Trading212Provider(noopSleep);
+    const instruments = await p.fetchInstruments(CREDS);
+
+    expect(instruments).toEqual([
+      { t212Ticker: 'TSCO_GB_EQ', isin: 'GB00BLGZ9862', currency: 'GBX', name: 'Tesco' },
+      { t212Ticker: 'AAPL_US_EQ', isin: 'US0378331005', currency: 'USD', name: 'Apple Inc.' },
+    ]);
+  });
+
+  it('throws Trading212ApiError on a non-ok response (sync degrades to order map)', async () => {
+    mockFetch({ '/equity/metadata/instruments': { ok: false, status: 429 } });
+    const p = new Trading212Provider(noopSleep);
+    await expect(p.fetchInstruments(CREDS)).rejects.toBeInstanceOf(Trading212ApiError);
+  });
+});
+
 describe('Trading212Provider.fetchOrders', () => {
   it('maps BUY + SELL, normalises a GBp price ÷100 → GBP, sums taxes into fee', async () => {
     mockFetch({

@@ -45,7 +45,7 @@ export interface Trading212SyncDeps {
   transactions: Pick<TransactionsRepo, 'upsertByExternalId'>;
   provider: Pick<
     BrokerProvider,
-    'fetchPositions' | 'fetchOrders' | 'fetchDividends'
+    'fetchPositions' | 'fetchOrders' | 'fetchDividends' | 'fetchInstruments'
   >;
   /** Atomic, account-scoped holdings snapshot-replace (no imports row). */
   replaceHoldings: (args: {
@@ -58,6 +58,9 @@ export interface Trading212SyncDeps {
     brokerSymbol: string,
     expectedCurrency?: string,
   ) => Promise<string>;
+  /** Fetch + cache a live price for each ticker (so positions don't value to €0
+   *  until the next refreshPrices cron). Best-effort; must not fail the sync. */
+  enrichPrices: (tickers: string[]) => Promise<void>;
   /** Decrypt the stored api_key_enc → combined "<public>:<private>" creds. */
   decrypt: (apiKeyEnc: string) => string;
   /** Injectable clock for deterministic tests; defaults to now. */
@@ -135,6 +138,30 @@ export async function runTrading212SyncWith(
 
     // --- holdings: positions → atomic snapshot-replace ----------------------
     const positions = await deps.provider.fetchPositions(creds);
+
+    // The order ledger only covers tickers we have a BUY for in the synced
+    // window — transferred-in shares and pre-history buys are missing, which
+    // would drop their ISIN/currency (→ no cost basis, wrong ticker resolution).
+    // If any held position is uncovered, fill the gaps from the authoritative
+    // instruments metadata. Best-effort: on a metadata error we degrade to the
+    // order-derived map rather than fail the whole sync.
+    const uncovered = positions.filter((p) => !tickerMap.has(p.t212Ticker));
+    if (uncovered.length > 0) {
+      try {
+        const instruments = await deps.provider.fetchInstruments(creds);
+        for (const inst of instruments) {
+          if (tickerMap.has(inst.t212Ticker)) continue;
+          tickerMap.set(inst.t212Ticker, {
+            isin: inst.isin,
+            currency: inst.currency, // RAW (e.g. GBX) → pence-normalised at use
+            name: inst.name,
+          });
+        }
+      } catch {
+        // keep the order-derived map; the uncovered positions stay best-effort.
+      }
+    }
+
     const newHoldings: HoldingCreate[] = [];
     for (const position of positions) {
       const brokerSymbol = brokerSymbolFromT212(position.t212Ticker);
@@ -165,6 +192,13 @@ export async function runTrading212SyncWith(
       existing: existing.map((h) => ({ id: h.id })),
       holdings: newHoldings,
     });
+
+    // Fetch a live price for every resolved ticker so the dashboard values the
+    // positions immediately (the fix for "synced value is €0 / half until the
+    // overnight cron"). Strictly best-effort: holdings + ledger are already
+    // committed, so a price-enrichment failure (incl. lazy dep wiring) must NOT
+    // flip an otherwise-successful sync to status=error — the cron is the backstop.
+    await deps.enrichPrices(newHoldings.map((h) => h.ticker)).catch(() => undefined);
 
     // --- success bookkeeping ------------------------------------------------
     const now = (deps.now?.() ?? new Date()).toISOString();
@@ -303,6 +337,7 @@ async function getProdDeps(): Promise<Trading212SyncDeps> {
     const { Trading212Provider } = await import('../providers/broker');
     const { commitHoldingsReplace } = await import('../db/importCommit');
     const { resolveTicker } = await import('../importers/resolveTicker');
+    const { enrichPrices } = await import('../market/enrichPrices');
     const { decryptSecret } = await import('../lib/crypto');
 
     prodDeps = {
@@ -313,6 +348,7 @@ async function getProdDeps(): Promise<Trading212SyncDeps> {
       provider: new Trading212Provider(),
       replaceHoldings: commitHoldingsReplace,
       resolveTicker,
+      enrichPrices,
       decrypt: (apiKeyEnc: string) => {
         const secret = process.env.T212_KEY_ENC_SECRET;
         if (!secret) {
