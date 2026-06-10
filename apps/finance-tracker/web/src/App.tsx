@@ -21,7 +21,11 @@ import { router } from "@/router";
  * was reachable without signing in.
  */
 function App() {
+  // /dev/* bypasses the AuthGate, so it is honoured ONLY in `vite dev`. In a
+  // production build there are no /dev routes (see router.tsx) and auth is
+  // always enforced.
   const isDevSurface =
+    import.meta.env.DEV &&
     typeof window !== "undefined" &&
     window.location.pathname.startsWith("/dev/");
 

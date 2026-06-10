@@ -23,9 +23,9 @@ import {
  * M13.3 / M13.4 — "Add to..." sheet.
  *
  * Opened when the user selects a ticker in the search palette. Collects the
- * destination account, quantity, (optional) total cost + currency, and an
- * acquisition date, validates with the shared {@link addPositionSchema} (the
- * client mirror of the server `addSchema`), then posts to `POST /api/holdings`.
+ * destination account, quantity, and (optional) total cost + currency,
+ * validates with the shared {@link addPositionSchema} (the client mirror of the
+ * server `addSchema`), then posts to `POST /api/holdings`.
  *
  * On success: a sonner toast fires, the sheet closes, and {@link useAddHolding}
  * invalidates the `["holdings"]` (+ prices/profiles) queries so the dashboard
@@ -47,8 +47,6 @@ export interface AddPositionSheetProps {
 
 type FieldErrors = Partial<Record<keyof AddPositionForm, string>>;
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
-
 export function AddPositionSheet({
   result,
   open,
@@ -61,7 +59,6 @@ export function AddPositionSheet({
   const [quantity, setQuantity] = useState("");
   const [cost, setCost] = useState("");
   const [currency, setCurrency] = useState<string>("EUR");
-  const [date, setDate] = useState(todayIso());
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const accounts = useMemo(
@@ -77,7 +74,6 @@ export function AddPositionSheet({
       setQuantity("");
       setCost("");
       setCurrency("EUR");
-      setDate(todayIso());
       setErrors({});
       setAccount((prev) => prev || accounts[0]?.id || "");
     }
@@ -98,7 +94,6 @@ export function AddPositionSheet({
       quantity: quantity === "" ? Number.NaN : Number(quantity),
       cost: cost === "" ? undefined : Number(cost),
       costCurrency: cost === "" ? undefined : currency,
-      date,
     });
 
     if (!parsed.success) {
@@ -210,16 +205,6 @@ export function AddPositionSheet({
               </select>
             </Field>
           </div>
-
-          <Field label="Date" htmlFor="add-date" error={errors.date}>
-            <input
-              id="add-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className={fieldClass}
-            />
-          </Field>
 
           <SheetFooter className="mt-2 gap-2">
             <Button

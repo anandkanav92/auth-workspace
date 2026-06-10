@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useAuth } from "@myorg/auth-google";
 
 import { LoginPage } from "@/components/auth/LoginPage";
 import { Skeleton } from "@/components/ui/skeleton";
+import { clearSensitiveCaches } from "@/lib/clearCaches";
 
 /**
  * M10.2 — auth boundary for the app.
@@ -15,6 +16,21 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export function AuthGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+
+  // P0 privacy: when a signed-in session ends (user → null), wipe the cached
+  // portfolio data so it can't survive logout on a shared device. We track the
+  // prior authed state so this fires only on the sign-out TRANSITION, not on a
+  // fresh never-signed-in load.
+  const wasAuthed = useRef(false);
+  useEffect(() => {
+    if (loading) return;
+    if (user) {
+      wasAuthed.current = true;
+    } else if (wasAuthed.current) {
+      wasAuthed.current = false;
+      void clearSensitiveCaches();
+    }
+  }, [user, loading]);
 
   if (loading) {
     // M15.1: a minimal branded skeleton instead of spinner/text while Firebase

@@ -10,7 +10,6 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { LayoutPreview } from "@/dev/LayoutPreview";
 import { TilesPreview } from "@/dev/TilesPreview";
 import { AccountHoldingsPage } from "@/routes/AccountHoldingsPage";
-import { AccountPage } from "@/routes/AccountPage";
 import { ActivityPage } from "@/routes/ActivityPage";
 import { ImportPage } from "@/routes/ImportPage";
 import { LearnPage } from "@/routes/LearnPage";
@@ -61,12 +60,17 @@ const portfolioRoute = createRoute({
   component: PortfolioPage,
 });
 
+// Bare /account/$id has no standalone view (the placeholder added no value) —
+// redirect to that account's holdings list, the actual destination.
 const accountRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/account/$id",
-  component: function AccountRouteComponent() {
-    const { id } = accountRoute.useParams();
-    return <AccountPage id={id} />;
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/account/$id/holdings",
+      params: { id: params.id },
+      replace: true,
+    });
   },
 });
 
@@ -119,6 +123,10 @@ const devTilesRoute = createRoute({
   component: TilesPreview,
 });
 
+// The /dev/* visual-QA surfaces bypass the AuthGate (see App.tsx), so they must
+// NEVER be registered in a production build — only in `vite dev`.
+const devRoutes = import.meta.env.DEV ? [devLayoutRoute, devTilesRoute] : [];
+
 const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     indexRoute,
@@ -130,8 +138,7 @@ const routeTree = rootRoute.addChildren([
     learnRoute,
     activityRoute,
   ]),
-  devLayoutRoute,
-  devTilesRoute,
+  ...devRoutes,
 ]);
 
 export const router = createRouter({ routeTree });

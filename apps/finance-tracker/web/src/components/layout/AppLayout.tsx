@@ -98,7 +98,7 @@ export function AppLayout() {
 
       <FabMenu
         onUpload={() => navigate({ to: "/import" })}
-        onAdd={() => navigate({ to: "/import" })}
+        onAdd={() => setSearchOpen(true)}
       />
       <BottomTabBar activeId={activeId} onSelect={handleTabSelect} />
 

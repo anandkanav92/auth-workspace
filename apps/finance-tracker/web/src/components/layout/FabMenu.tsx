@@ -13,7 +13,7 @@ import {
 export interface FabMenuProps {
   /** Triggered when "Upload statement" is chosen. */
   onUpload?: () => void;
-  /** Triggered when "Add transaction" is chosen. */
+  /** Triggered when "Add a holding" is chosen (opens search to pick a ticker). */
   onAdd?: () => void;
 }
 
@@ -69,9 +69,9 @@ export function FabMenu({ onUpload, onAdd }: FabMenuProps) {
             >
               <PlusCircle className="h-5 w-5 text-accent" aria-hidden />
               <span>
-                <span className="block font-medium text-fg">Add transaction</span>
+                <span className="block font-medium text-fg">Add a holding</span>
                 <span className="block text-sm text-muted">
-                  Record a buy, sell, or dividend by hand.
+                  Search for a stock or ETF to add by hand.
                 </span>
               </span>
             </button>

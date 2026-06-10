@@ -4,7 +4,11 @@
   "scripts": {
     "dev": "pnpm --parallel -r dev",
     "build": "pnpm --filter @myorg/auth-google build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "build:finance": "pnpm --filter finance-tracker-web build && pnpm --filter finance-tracker-server build",
+    "test:finance": "pnpm --filter finance-tracker-web test && pnpm --filter finance-tracker-server test",
+    "test:finance:integration": "pnpm --filter finance-tracker-server test:integration",
+    "verify:finance": "pnpm run build:finance && pnpm run test:finance && pnpm run test:finance:integration"
   },
   "pnpm": {
     "overrides": {

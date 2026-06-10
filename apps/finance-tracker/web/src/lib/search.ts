@@ -76,8 +76,6 @@ export const addPositionSchema = z
       .nonnegative("Cost cannot be negative")
       .optional(),
     costCurrency: z.string().optional(),
-    /** Display-only acquisition date; see {@link buildAddHoldingBody}. */
-    date: z.string().optional(),
   })
   .refine((v) => v.cost === undefined || (v.costCurrency?.trim().length ?? 0) > 0, {
     message: "Pick a currency for the cost",
@@ -89,9 +87,9 @@ export type AddPositionForm = z.infer<typeof addPositionSchema>;
 /**
  * Request body for `POST /api/holdings`, EXACTLY matching the server `addSchema`.
  *
- * NOTE: the server stamps `occurred_at` itself (now()) and has no body field for
- * an acquisition date, so the form's `date` is intentionally NOT sent. It is a
- * display/UX affordance only — documented as a known contract gap for M13.
+ * NOTE: the server stamps the buy transaction's `occurred_at` itself (now()) and
+ * has no body field for an acquisition date, so the form has no date input.
+ * (Backdating a manual buy would be a feature, not a field we silently drop.)
  */
 export interface AddHoldingBody {
   account: string;
