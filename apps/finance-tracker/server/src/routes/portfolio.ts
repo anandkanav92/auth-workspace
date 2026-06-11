@@ -81,7 +81,8 @@ export const portfolioRoutes = new Hono<Vars>().get('/history', async (c) => {
         holdings,
         prices,
         profiles,
-        fxRates: fxRow?.rates ?? { EUR: 1 },
+        // No { EUR: 1 } fallback — see buildSnapshot's FX-coverage guard.
+        fxRates: fxRow?.rates ?? {},
       });
       return c.json(snapshot);
     } catch (err) {

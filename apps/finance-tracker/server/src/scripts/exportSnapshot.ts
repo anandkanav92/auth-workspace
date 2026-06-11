@@ -30,6 +30,7 @@ function parseArgs(argv: string[]): Args {
   const out: Partial<Args> = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    if (a === '--') continue; // bare separator (pnpm passes one through) — ignore
     const take = (inline: string) =>
       inline.includes('=') ? inline.slice(inline.indexOf('=') + 1) : argv[++i];
     if (a === '--user' || a.startsWith('--user=')) out.user = take(a);
@@ -141,7 +142,9 @@ async function main(): Promise<void> {
     holdings,
     prices,
     profiles,
-    fxRates: fxRow?.rates ?? { EUR: 1 },
+    // No { EUR: 1 } fallback: an empty map makes buildSnapshot's FX-coverage
+    // guard throw for any non-EUR holding, rather than silently valuing it at 0.
+    fxRates: fxRow?.rates ?? {},
   });
 
   const outPath = resolve(expandHome(args.out));

@@ -81,6 +81,32 @@ const round = (n: number, dp: number): number => {
   return Math.round(n * f) / f;
 };
 
+/** True when `currency` can be converted to EUR with the given rates. */
+function isConvertible(currency: string, rates: Record<string, number>): boolean {
+  if (!currency || currency === 'EUR') return true;
+  if (currency === 'GBX' || currency === 'GBp') return typeof rates['GBP'] === 'number';
+  return typeof rates[currency] === 'number';
+}
+
+/**
+ * Currencies used by these holdings (price + cost) that have NO usable rate.
+ * `priceCurrency` falls back to cost_currency then EUR — mirroring the join — so
+ * an unpriced non-EUR holding still requires its rate (its value is 0 either way,
+ * but its presence signals an FX-data gap worth failing on).
+ */
+function missingFxCurrencies(
+  open: Holding[],
+  priceByTicker: Map<string, PriceCache>,
+  rates: Record<string, number>,
+): string[] {
+  const needed = new Set<string>();
+  for (const h of open) {
+    needed.add(priceByTicker.get(h.ticker)?.currency ?? h.cost_currency ?? 'EUR');
+    if (hasCostBasis(h)) needed.add(h.cost_currency as string);
+  }
+  return [...needed].filter((c) => !isConvertible(c, rates)).sort();
+}
+
 /** EUR multiplier for one unit of `currency`, EUR-base rates. 0 if unconvertible. */
 function fxToEur(currency: string, rates: Record<string, number>): number {
   if (!currency || currency === 'EUR') return 1;
@@ -127,6 +153,20 @@ export function buildSnapshot(inputs: SnapshotInputs): PortfolioSnapshot {
   const open = holdings.filter((h) => h.quantity !== 0);
   if (open.length === 0) {
     throw new Error('snapshot: user has no open holdings (quantity > 0)');
+  }
+
+  // FX-coverage guard. Refuse to emit if any currency a holding ACTUALLY USES
+  // lacks a rate: otherwise that position would silently convert at a 0
+  // multiplier (see fxToEur), producing a schema-valid but materially understated
+  // snapshot — exactly the "bad evidence" the consumer must never ingest. This is
+  // stronger than checking "FX row exists": it also catches a present-but-
+  // incomplete row (e.g. rates lacks USD). An all-EUR portfolio needs no rates and
+  // passes with an empty map.
+  const missing = missingFxCurrencies(open, priceByTicker, fxRates);
+  if (missing.length > 0) {
+    throw new Error(
+      `snapshot: missing FX rate(s) for ${missing.join(', ')} — refusing to emit a distorted snapshot`,
+    );
   }
 
   const joined: Joined[] = open.map((h) => {
@@ -181,8 +221,8 @@ export function buildSnapshot(inputs: SnapshotInputs): PortfolioSnapshot {
     );
   }
 
-  // Weights, computed from full-precision value/total (rounded to 6dp so the
-  // consumer's "weights sum ~= 1 (+/-0.001)" invariant holds comfortably).
+  // Weights = each (2dp) valueEur / total, rounded to 6dp so the consumer's
+  // "weights sum ~= 1 (+/-0.001)" invariant holds comfortably.
   for (const j of joined) {
     j.holding.weight = round(j.holding.valueEur / totalValueEur, 6);
   }

@@ -218,6 +218,42 @@ describe('buildSnapshot — guards', () => {
     ).toThrow(/no open holdings/i);
   });
 
+  it('throws when FX is missing for a currency a holding uses (no silent 0)', () => {
+    expect(() =>
+      buildSnapshot({
+        now: NOW,
+        fxRates: { EUR: 1 }, // USD rate absent
+        holdings: [holding({ ticker: 'NVDA', quantity: 10, cost_basis: 1000, cost_currency: 'USD' })],
+        prices: [price('NVDA', 110, 'USD')],
+        profiles: [profile('NVDA')],
+      }),
+    ).toThrow(/missing FX rate.*USD/i);
+  });
+
+  it('throws when the FX map is empty but a non-EUR holding exists', () => {
+    expect(() =>
+      buildSnapshot({
+        now: NOW,
+        fxRates: {},
+        holdings: [holding({ ticker: 'NVDA', quantity: 10, cost_currency: 'USD' })],
+        prices: [price('NVDA', 110, 'USD')],
+        profiles: [profile('NVDA')],
+      }),
+    ).toThrow(/missing FX rate/i);
+  });
+
+  it('succeeds for an all-EUR portfolio even with NO FX rates', () => {
+    const snap = buildSnapshot({
+      now: NOW,
+      fxRates: {}, // no rates needed when everything is EUR
+      holdings: [holding({ ticker: 'IWDA', quantity: 10, cost_basis: 900, cost_currency: 'EUR' })],
+      prices: [price('IWDA', 100, 'EUR')],
+      profiles: [profile('IWDA', { asset_type: 'etf' })],
+    });
+    expect(snap.totals.valueEur).toBe(1000);
+    expect(snap.concentration.byCurrency['EUR']).toBeCloseTo(1, 6);
+  });
+
   it('throws when total value is 0 (nothing priced)', () => {
     expect(() =>
       buildSnapshot({
