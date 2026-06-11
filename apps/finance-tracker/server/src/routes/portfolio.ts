@@ -8,7 +8,9 @@
 // Mounted behind authMiddleware + rateLimit; reads are user-scoped in the repo.
 
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import type { HoldingsSnapshot } from '../db/schemas';
+import { buildSnapshot } from '../export/portfolioSnapshot';
 
 type Vars = { Variables: { uid: string; email: string; pbUserId: string } };
 
@@ -55,4 +57,39 @@ export const portfolioRoutes = new Hono<Vars>().get('/history', async (c) => {
     accountId,
   );
   return c.json(groupSnapshotsByDate(rows));
-});
+})
+  // GET /api/portfolio/snapshot
+  //   → the Investment Research Lab portfolio-snapshot contract (schemaVersion 1)
+  //     for the signed-in user. Same JSON the CLI exporter writes; shares the pure
+  //     buildSnapshot so the file and the API can never drift.
+  .get('/snapshot', async (c) => {
+    const pbUserId = c.var.pbUserId;
+    const { holdingsRepo } = await import('../db/holdings');
+    const { priceCacheRepo } = await import('../db/priceCache');
+    const { symbolProfilesRepo } = await import('../db/symbolProfiles');
+    const { fxRatesRepo } = await import('../db/fxRates');
+
+    const [holdings, prices, profiles, fxRow] = await Promise.all([
+      holdingsRepo.listForUser(pbUserId, { openOnly: true }),
+      priceCacheRepo.list(),
+      symbolProfilesRepo.list(),
+      fxRatesRepo.getLatest(),
+    ]);
+
+    try {
+      const snapshot = buildSnapshot({
+        holdings,
+        prices,
+        profiles,
+        // No { EUR: 1 } fallback — see buildSnapshot's FX-coverage guard.
+        fxRates: fxRow?.rates ?? {},
+      });
+      return c.json(snapshot);
+    } catch (err) {
+      // buildSnapshot throws on un-snapshottable state (no open holdings / zero
+      // value) — surface that as 422, not a 500.
+      throw new HTTPException(422, {
+        message: err instanceof Error ? err.message : 'cannot build snapshot',
+      });
+    }
+  });

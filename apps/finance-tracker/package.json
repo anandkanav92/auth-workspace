@@ -7,6 +7,7 @@
     "dev:web": "pnpm --filter ./web dev",
     "dev:server": "pnpm --filter ./server dev",
     "build": "pnpm --filter ./web build && pnpm --filter ./server build",
+    "export:snapshot": "pnpm --filter ./server export:snapshot",
     "test": "pnpm --recursive test"
   }
 }
